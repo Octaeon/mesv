@@ -10,17 +10,26 @@ import gleam/string
 /// pub type ParsingError {
 ///   CantParseRow(index: Int, contents: String, reason: String)
 ///   ExpectedHeadersMismatch(expected: List(String), found: List(String))
-///   RanOutOfElements
+///   RanOutOfValues
 ///   StrictParsedWithLeftovers(leftovers: List(String))
 /// }
 /// ```
+/// 
 pub type ParsingError {
   CantParseRow(index: Int, contents: String, reason: String)
   ExpectedHeadersMismatch(expected: List(String), found: List(String))
-  RanOutOfElements
+  RanOutOfValues
   StrictParsedWithLeftovers(leftovers: List(String))
 }
 
+/// The type describing how to create a value of type `a` from a String.
+/// 
+/// To create it, use the `build` function, the provided transformation functions
+/// (`set_row_sep`, `set_col_sep`, `expect_headers`, `set_escaper`) to configure the specific behaviour,
+/// and the `column` function to specify how each subsequent column should be parsed.
+/// 
+/// Once you have the desired `Parser(a)`, use the `parse` function to convert a `String` into a `List(a)` (plus a list of `ParsingError`s).
+/// 
 pub opaque type Parser(a) {
   Parser(
     column_separator: String,
@@ -80,7 +89,7 @@ pub fn column(
         |> result.map(constructor)
         |> result.map(fn(b) { #(b, rest) })
 
-      [] -> Error(RanOutOfElements)
+      [] -> Error(RanOutOfValues)
     }
   })
 }
@@ -139,7 +148,6 @@ pub fn set_col_sep(
 /// parse(parser: Parser(a), source: String) -> Result(#(List(a), List(ParsingError)), ParsingError)
 /// ```
 /// 
-/// 
 /// If the headers specified in the `expect_headers` function did not match the specified pattern, a `ParsingError` will be returned,
 /// of the type `ExpectedHeadersMismatch`, containing both the expected headers, and what was found.
 /// 
@@ -182,6 +190,7 @@ pub fn parse(
       // A locally defined function capturing the parser data, that is used for processing each row
       let process_row = fn(elements: List(String)) -> Result(a, ParsingError) {
         elements
+        // TODO : The `unescape` mapping function should go here.
         |> parse()
         |> result.try(fn(output: #(a, List(String))) -> Result(a, ParsingError) {
           let #(value, leftovers) = output
@@ -252,7 +261,8 @@ fn partition_on_unescaped_(
       case
         string.starts_with(first, escaper) && !string.ends_with(first, escaper)
       {
-        True -> Some(first <> second)
+        // I almost forgot to readd the separator when merging the strings.
+        True -> Some(first <> el <> second)
         False -> None
       }
     })
