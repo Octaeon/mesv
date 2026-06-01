@@ -38,6 +38,7 @@ pub opaque type Parser(a) {
     expect_headers: Option(List(String)),
     parse: fn(List(String)) -> Result(#(a, List(String)), ParsingError),
     strict_columns: Bool,
+    trim_whitespace: #(Bool, Bool),
   )
 }
 
@@ -61,6 +62,7 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
       Ok(#(f, tokens))
     },
     strict_columns: False,
+    trim_whitespace: #(True, True),
   )
 }
 
@@ -127,6 +129,21 @@ pub fn set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a) {
   Parser(..parser, escaper: new_escaper)
 }
 
+/// Function to set whether the parser should trim the whitespace on both ends of each value.
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// set_trim_whitespace(parser: Parser(a), trim_start: Bool, trim_end: Bool) -> Parser(a)
+/// ```
+/// 
+pub fn set_trim_whitespace(
+  parser: Parser(a),
+  trim_start: Bool,
+  trim_end: Bool,
+) -> Parser(a) {
+  Parser(..parser, trim_whitespace: #(trim_start, trim_end))
+}
+
 /// Function to set a specific column separator, instead of the default comma (`,`)
 ///
 /// ### Function Declaration
@@ -168,6 +185,7 @@ pub fn parse(
     headers,
     parse,
     strict_columns,
+    #(trim_start, trim_end),
   ) = parser
 
   let split_rows =
@@ -190,7 +208,7 @@ pub fn parse(
       // A locally defined function capturing the parser data, that is used for processing each row
       let process_row = fn(elements: List(String)) -> Result(a, ParsingError) {
         elements
-        // TODO : The `unescape` mapping function should go here.
+        // TODO : The `unescape` mapping function should go here, plus the trimming of whitespace
         |> parse()
         |> result.try(fn(output: #(a, List(String))) -> Result(a, ParsingError) {
           let #(value, leftovers) = output
