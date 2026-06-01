@@ -1,12 +1,17 @@
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/string
 
+/// The type describing how to convert a specified data type `a` into String form.
+/// 
+/// To create it, use the `build` function and the provided transformation functions
+/// (`set_row_sep`, `set_col_sep`, `set_headers`, `set_escaper`) to configure the 
 pub opaque type Formatter(a) {
   Formatter(
     column_separator: String,
     row_separator: String,
     escaper: String,
-    headers: List(String),
+    headers: Option(List(String)),
     formatter: fn(a) -> List(String),
   )
 }
@@ -23,7 +28,7 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
     column_separator: ",",
     row_separator: "\n",
     escaper: "\"",
-    headers: [],
+    headers: None,
     formatter: f,
   )
 }
@@ -34,6 +39,9 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
 /// ```gleam
 /// set_row_sep(formatter: Formatter(a), new_row_separator: String) -> Formatter(a)
 /// ```
+/// 
+/// If the row separator chosen is longer than a single character, it might cause problems with performance later
+/// during parsing.
 /// 
 pub fn set_row_sep(
   formatter: Formatter(a),
@@ -49,6 +57,9 @@ pub fn set_row_sep(
 /// set_col_sep(formatter: Formatter(a), new_column_separator: String) -> Formatter(a)
 /// ```
 /// 
+/// If the column separator chosen is longer than a single character, it might cause problems with performance later
+/// during parsing.
+/// 
 pub fn set_col_sep(
   formatter: Formatter(a),
   new_column_separator: String,
@@ -56,7 +67,9 @@ pub fn set_col_sep(
   Formatter(..formatter, column_separator: new_column_separator)
 }
 
-/// Function to manually set column headers in a particular order
+/// Function to manually set column headers in a particular order.
+/// 
+/// By default, the headers will not be written to output String.
 ///
 /// ### Function Declaration
 /// ```gleam
@@ -67,11 +80,26 @@ pub fn set_headers(
   formatter: Formatter(a),
   new_headers: List(String),
 ) -> Formatter(a) {
-  Formatter(..formatter, headers: new_headers)
+  Formatter(..formatter, headers: Some(new_headers))
+}
+
+/// Function to set custom escaper
+/// (character that wraps the value if its' string contains row or column separators, or the escaper itself)
+///
+/// ### Function Declaration
+/// ```gleam
+/// set_escaper(formatter: Formatter(a), new_escaper: String) -> Formatter(a)
+/// ```
+/// 
+pub fn set_escaper(
+  formatter: Formatter(a),
+  new_escaper: String,
+) -> Formatter(a) {
+  Formatter(..formatter, escaper: new_escaper)
 }
 
 /// Internal helper function for creating a function that checks if a specific element needs to be escaped
-/// (wrapped in quotation marks) before being written to file.
+/// (wrapped in escaper, which by default is `"`) before being written to file.
 /// 
 /// ### Function Declaration
 /// ```gleam
@@ -124,12 +152,27 @@ fn wrap(in in: String) -> fn(String) -> String {
   fn(el: String) -> String { in <> el <> in }
 }
 
+/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`, and encodes it into a String.
+/// 
+/// All of the configuration options need to be set when building the `Formatter`,
+/// so this function is very simple to understand.
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// format(formatter: Formatter(a), elements: List(a)) -> String
+/// ```
+/// 
 pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
-  let Formatter(column_separator, row_separator, escaper, headers, to_string) =
-    formatter
+  let Formatter(
+    column_separator,
+    row_separator,
+    escaper,
+    maybe_headers,
+    to_string,
+  ) = formatter
 
   // For each separate element (column value in specific row) replace the first String with the second
-  let rules = [#(escaper, escaper <> escaper), #("\"", "\"\"")]
+  let rules = [#(escaper, escaper <> escaper)]
   let escapeify = fn(el: String) -> String {
     el
     |> string.trim()
@@ -141,13 +184,14 @@ pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
       column_separator,
       row_separator,
       escaper,
-      ",",
-      "\"",
       "\n",
       "\r",
     ])
 
-  [headers, ..elements |> list.map(to_string)]
+  case maybe_headers {
+    Some(headers) -> [headers, ..elements |> list.map(to_string)]
+    None -> elements |> list.map(to_string)
+  }
   |> list.map(fn(values: List(String)) -> String {
     values
     |> list.map(string.trim)
