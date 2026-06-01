@@ -1,26 +1,273 @@
-pub type ParsingError
+import gleam/list
+import gleam/option.{type Option, None, Some}
+import gleam/result
+import gleam/string
+
+/// An error type representing any kind of error encountered when parsing.
+/// 
+/// ### Type definition
+/// ```gleam
+/// pub type ParsingError {
+///   CantParseRow(index: Int, contents: String, reason: String)
+///   ExpectedHeadersMismatch(expected: List(String), found: List(String))
+///   RanOutOfElements
+///   StrictParsedWithLeftovers(leftovers: List(String))
+/// }
+/// ```
+pub type ParsingError {
+  CantParseRow(index: Int, contents: String, reason: String)
+  ExpectedHeadersMismatch(expected: List(String), found: List(String))
+  RanOutOfElements
+  StrictParsedWithLeftovers(leftovers: List(String))
+}
 
 pub opaque type Parser(a) {
   Parser(
     column_separator: String,
     row_separator: String,
+    escaper: String,
+    expect_headers: Option(List(String)),
     parse: fn(List(String)) -> Result(#(a, List(String)), ParsingError),
+    strict_columns: Bool,
   )
 }
 
-pub fn parsed(f: fn(a) -> b) -> fn(a) -> b {
-  f
-}
-
+/// Function for directly building a `Parser` that uses the subsequent elements in order
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// build(f: fn(a) -> b) -> Parser(fn(a) -> b)
+/// ```
+/// 
 pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
   Parser(
     column_separator: ",",
     row_separator: "\n",
+    escaper: "\"",
+    expect_headers: None,
     parse: fn(tokens: List(String)) -> Result(
       #(fn(a) -> b, List(String)),
       ParsingError,
     ) {
       Ok(#(f, tokens))
     },
+    strict_columns: False,
   )
+}
+
+/// Function to build a `Parser`, by passing in a parsing function for a specified column.
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// column(parser: Parser(fn(a) -> b), parse: fn(String) -> Result(a, ParsingError)) -> Parser(b)
+/// ```
+/// 
+pub fn column(
+  parser: Parser(fn(a) -> b),
+  parse: fn(String) -> Result(a, ParsingError),
+) -> Parser(b) {
+  Parser(..parser, parse: fn(tokens: List(String)) {
+    use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
+
+    // This case ends up being run when the parser is running.
+    // So, if the list ends up empty, that means that one row has too few elements
+    // to build the expected data type.
+    case remaining_tokens {
+      [token, ..rest] ->
+        // TODO: Should I process the elements here, or no? I'm not sure
+        token
+        |> parse()
+        |> result.map(constructor)
+        |> result.map(fn(b) { #(b, rest) })
+
+      [] -> Error(RanOutOfElements)
+    }
+  })
+}
+
+/// Function to specify that we expect the CSV headers to follow this exact format.
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a)
+/// ```
+/// 
+pub fn expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a) {
+  Parser(..parser, expect_headers: Some(headers))
+}
+
+/// Function to set a specific row separator, instead of the default newline (`\n`)
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// set_row_sep(parser: Parser(a), new_row_separator: String) -> Parser(a)
+/// ```
+/// 
+pub fn set_row_sep(parser: Parser(a), new_row_separator: String) -> Parser(a) {
+  Parser(..parser, row_separator: new_row_separator)
+}
+
+/// Function to set a specific column separator, instead of the default comma (`,`)
+///
+/// ### Function Declaration
+/// ```gleam
+/// set_col_sep(parser: Parser(a), new_column_separator: String) -> Parser(a)
+/// ```
+/// 
+pub fn set_col_sep(
+  parser: Parser(a),
+  new_column_separator: String,
+) -> Parser(a) {
+  Parser(..parser, column_separator: new_column_separator)
+}
+
+/// Function to use the specified `Parser(a)` to transform the source into a `List(a)`
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// parse(parser: Parser(a), source: String) -> Result(#(List(a), List(ParsingError)), ParsingError)
+/// ```
+/// 
+/// 
+/// If the headers specified in the `expect_headers` function did not match the specified pattern, a `ParsingError` will be returned,
+/// of the type `ExpectedHeadersMismatch`, containing both the expected headers, and what was found.
+/// 
+/// If the headers weren't specified, or were specified and match the expected pattern, the function will return `Ok(#(List(parsed_type), List(ParsingError)))`;
+/// The first is the list of all rows that were successfully parsed, while the second is a list of `ParsingError`s that were thrown due to
+/// a row failing to parse.
+/// 
+/// What to do with both of these Lists is up to the user, whether to ignore all errors or abort if any errors occur.
+/// 
+pub fn parse(
+  parser: Parser(a),
+  source: String,
+) -> Result(#(List(a), List(ParsingError)), ParsingError) {
+  let Parser(
+    column_separator,
+    row_separator,
+    escaper,
+    headers,
+    parse,
+    strict_columns,
+  ) = parser
+
+  let split_rows =
+    partition_on_unescaped_(separator: row_separator, not_in: escaper)
+
+  case split_rows(source) {
+    [] -> Ok(#([], []))
+    [found_headers, ..contents] -> {
+      // A local instance of the `partition_on_unescaped_` function, specifically for splitting columns
+      let split_columns =
+        partition_on_unescaped_(separator: column_separator, not_in: escaper)
+
+      // If the headers are the same as expected, or the user didn't care and didn't specify them, they are in this value.
+      // But if they weren't as expected, this use statement means the rest of the function is not executed.
+      use _headers <- result.try(process_headers(
+        headers,
+        split_columns(found_headers),
+      ))
+
+      // A locally defined function capturing the parser data, that is used for processing each row
+      let process_row = fn(elements: List(String)) -> Result(a, ParsingError) {
+        elements
+        |> parse()
+        |> result.try(fn(output: #(a, List(String))) -> Result(a, ParsingError) {
+          let #(value, leftovers) = output
+          case strict_columns, leftovers {
+            False, _ -> Ok(value)
+            True, [] -> Ok(value)
+            True, _ -> Error(StrictParsedWithLeftovers(leftovers))
+          }
+        })
+      }
+
+      Ok(
+        contents
+        |> list.map(fn(row_string) {
+          row_string
+          |> split_columns()
+          |> process_row()
+        })
+        |> result.partition(),
+      )
+    }
+  }
+}
+
+/// Internal helper function to check whether the CSV headers that were found match the expected pattern that was specified
+/// in the Parser building process.
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// process_headers(expected: Option(List(String)), found: List(String)) -> Result(List(String), ParsingError)
+/// ```
+/// 
+fn process_headers(
+  expected: Option(List(String)),
+  found: List(String),
+) -> Result(List(String), ParsingError) {
+  case expected {
+    Some(pattern) ->
+      case found == pattern {
+        True -> Ok(found)
+        False -> Error(ExpectedHeadersMismatch(pattern, found))
+      }
+    None -> Ok(found)
+  }
+}
+
+/// Internal helper function for constructing a function that splits a `String` on `el`, as long as the `el` is not between two `not_in`.
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// partition_on_unescaped_(separator el: String, not_in escaper: String) -> fn(String) -> List(String)
+/// ```
+/// 
+fn partition_on_unescaped_(
+  separator el: String,
+  not_in escaper: String,
+) -> fn(String) -> List(String) {
+  // TODO : Maybe instead of checking for escapers on both the beginning and the end, we should count the number of escapers and check if it's an even number?
+  // Since according to the [CSV specification](https://www.ietf.org/rfc/rfc4180.txt), the syntax of the format ensures that for every element,
+  // the doubleQuotes that are used as escapers must be even.
+  fn(to_split: String) -> List(String) {
+    to_split
+    // First split the string on the separator
+    |> string.split(on: el)
+    // Then traverse the List and merge any two Strings that don't form a cell together
+    |> list_merge_map(fn(first: String, second: String) -> Option(String) {
+      // If the first string starts with an escaper but does not end in one, then merge the two
+      case
+        string.starts_with(first, escaper) && !string.ends_with(first, escaper)
+      {
+        True -> Some(first <> second)
+        False -> None
+      }
+    })
+  }
+}
+
+/// Internal helper function that traverses a list, calling the `merge` function on all consecutive elements.
+/// 
+/// If the function returns `Some(a)`, then the two elements are replaced with the contents, and if it returns `None`,
+/// the function advances to the next pair of elements.
+pub fn list_merge_map(list: List(a), merge: fn(a, a) -> Option(a)) -> List(a) {
+  list_merge_map_loop(list, merge, [])
+}
+
+pub fn list_merge_map_loop(
+  list: List(a),
+  merge: fn(a, a) -> Option(a),
+  acc: List(a),
+) -> List(a) {
+  case list {
+    [] -> list.reverse(acc)
+    [last] -> list.reverse([last, ..acc])
+    [first, second, ..rest] ->
+      case merge(first, second) {
+        Some(merged) -> list_merge_map_loop([merged, ..rest], merge, acc)
+        None -> list_merge_map_loop([second, ..rest], merge, [first, ..acc])
+      }
+  }
 }
