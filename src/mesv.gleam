@@ -2,6 +2,35 @@
 
 import gleam/io
 
+/// A subset of an identity function for 1-arity functions.
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// parsed(f: fn(a) -> b) -> fn(a) -> b
+/// ```
+/// Meant to be used in the `build` function with `use` statements, like so:
+/// ```gleam
+/// mesv.parse.build({
+///   use player <- mesv.parsed
+///   use score <- mesv.parsed
+///   #(player, score)
+/// })
+/// ```
+/// To clarify, the above code is equivalent to:
+/// ```gleam
+/// mesv.parse.build({
+///   fn(player) {
+///     fn(score) {
+///       #(player, score)
+///     }
+///   }
+/// })
+/// ```
+/// 
+pub fn parsed(f: fn(a) -> b) -> fn(a) -> b {
+  f
+}
+
 pub fn main() -> Nil {
   io.println("Hello from mesv!")
 }
