@@ -107,6 +107,17 @@ pub fn set_row_sep(parser: Parser(a), new_row_separator: String) -> Parser(a) {
   Parser(..parser, row_separator: new_row_separator)
 }
 
+/// Function to set a specific value escaper, instead of the default doublequotes (`"`)
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a)
+/// ```
+/// 
+pub fn set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a) {
+  Parser(..parser, escaper: new_escaper)
+}
+
 /// Function to set a specific column separator, instead of the default comma (`,`)
 ///
 /// ### Function Declaration
