@@ -5,12 +5,16 @@ import gleam/string
 /// The type describing how to convert a specified data type `a` into String form.
 /// 
 /// To create it, use the `build` function and the provided transformation functions
-/// (`set_row_sep`, `set_col_sep`, `set_headers`, `set_escaper`) to configure the 
+/// (`set_row_sep`, `set_col_sep`, `set_headers`, `set_escaper`) to configure the specific behaviour.
+/// 
+/// Once you have the required `Formatter(a)`, use the `format` function to convert a `List(a)` into a String.
+/// 
 pub opaque type Formatter(a) {
   Formatter(
     column_separator: String,
     row_separator: String,
     escaper: String,
+    escape_all: Bool,
     headers: Option(List(String)),
     formatter: fn(a) -> List(String),
   )
@@ -28,6 +32,7 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
     column_separator: ",",
     row_separator: "\n",
     escaper: "\"",
+    escape_all: False,
     headers: None,
     formatter: f,
   )
@@ -96,6 +101,19 @@ pub fn set_escaper(
   new_escaper: String,
 ) -> Formatter(a) {
   Formatter(..formatter, escaper: new_escaper)
+}
+
+/// Function to specify whether to wrap each value in an escaper, whether or not it's required.
+/// 
+/// By default false.
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a)
+/// ```
+/// 
+pub fn set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a) {
+  Formatter(..parser, escape_all: escape_all)
 }
 
 /// Internal helper function for creating a function that checks if a specific element needs to be escaped
@@ -167,6 +185,7 @@ pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
     column_separator,
     row_separator,
     escaper,
+    escape_all,
     maybe_headers,
     to_string,
   ) = formatter
@@ -188,6 +207,13 @@ pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
       "\r",
     ])
 
+  let ensafeify = fn(val: String) -> String {
+    case escape_all || to_escape(val) {
+      True -> escapeify(val)
+      False -> val
+    }
+  }
+
   case maybe_headers {
     Some(headers) -> [headers, ..elements |> list.map(to_string)]
     None -> elements |> list.map(to_string)
@@ -195,12 +221,7 @@ pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
   |> list.map(fn(values: List(String)) -> String {
     values
     |> list.map(string.trim)
-    |> list.map(fn(val: String) -> String {
-      case to_escape(val) {
-        True -> escapeify(val)
-        False -> val
-      }
-    })
+    |> list.map(ensafeify)
     |> string.join(column_separator)
   })
   |> string.join(row_separator)
