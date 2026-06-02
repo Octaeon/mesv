@@ -230,7 +230,7 @@ pub fn parse(
         }
       }
 
-      let unescape = unescape(escaper, [#(escaper, escaper <> escaper)])
+      let unescape = unescape([#(escaper, escaper <> escaper)])
 
       // If the headers are the same as expected, or the user didn't care and didn't specify them, they are in this value.
       // But if they weren't as expected, this use statement means the rest of the function is not executed.
@@ -242,13 +242,25 @@ pub fn parse(
       // A locally defined function capturing the parser data, that is used for processing each row
       let process_row = fn(elements: List(String)) -> Result(a, ParsingError) {
         elements
-        // TODO : The `unescape` mapping function should go here, plus the trimming of whitespace
+        // Trim white space according to the rules set.
+        // It's before the unwrap steps in case the CSV file was modified, for example to align the columns
         |> list.map(trim_whitespace)
+        // Unwrap the String - ie, if the escape characters are present both at the beginning
+        // and end of the String, remove them.
+        // If only one end of the String has an escaper, throw a Parsing error for this row.
         |> list.map(unwrap)
         |> result.all()
         |> result.try(fn(elements: List(String)) -> Result(a, ParsingError) {
           elements
+          // Unescape the String - for now, just deduplicate the escaper characters
+          // (According to the CSV format standard, if any doubleQuotes appear inside a cell,
+          // they must be replaced with two of them, and the entire cell wrapped)
+          |> list.map(unescape)
+          // Call the Parsing function to convert the `List(String)` of elements (already unescaped and unwrapped)
+          // to try and convert it into the desired data type `a`.
           |> parse()
+          // If the parsing step succeeded, check whether there were any leftovers,
+          // and depending on the parser settings, either proceed or throw an error.
           |> result.try(fn(output: #(a, List(String))) -> Result(
             a,
             ParsingError,
@@ -263,9 +275,14 @@ pub fn parse(
         })
       }
 
+      // At this point, the `Ok` output is guaranteed, even if parsing of every single row
+      // fails, and the `List(a)` is empty.
+      // So just map over the `List(String)` of rows and try to parse each of them,
+      // and then partition the `List(Result(a, ParsingError))` into `#(List(a), List(ParsingError))`
       Ok(
         contents
         |> list.map(fn(row_string) {
+          // All of the parsing functions are condensed here to avoid having to map multiple times.
           row_string
           |> split_columns()
           |> process_row()
@@ -290,19 +307,15 @@ pub fn parse(
 /// It's a curried function because I like functional programming, and because it *should* give some performance improvements
 /// if I create such a function before any looping instead of constructing one for each iteration.
 /// 
-fn unescape(
-  escaper: String,
-  rules: List(#(String, String)),
-) -> fn(String) -> String {
+fn unescape(rules: List(#(String, String))) -> fn(String) -> String {
   fn(el: String) -> String {
     rules
     |> list.map(fn(rule: #(String, String)) -> fn(String) -> String {
       string.replace(each: rule.1, with: rule.0, in: _)
     })
-    |> list.fold(
-      el |> string.remove_prefix(escaper) |> string.remove_suffix(escaper),
-      fn(acc: String, rule: fn(String) -> String) -> String { rule(acc) },
-    )
+    |> list.fold(el, fn(acc: String, rule: fn(String) -> String) -> String {
+      rule(acc)
+    })
   }
 }
 
