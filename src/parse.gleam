@@ -1,3 +1,4 @@
+import gleam/function
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -12,6 +13,7 @@ import gleam/string
 ///   ExpectedHeadersMismatch(expected: List(String), found: List(String))
 ///   RanOutOfValues
 ///   StrictParsedWithLeftovers(leftovers: List(String))
+///   EncounteredMalformedElement(element: String, description: String)
 /// }
 /// ```
 /// 
@@ -20,6 +22,7 @@ pub type ParsingError {
   ExpectedHeadersMismatch(expected: List(String), found: List(String))
   RanOutOfValues
   StrictParsedWithLeftovers(leftovers: List(String))
+  EncounteredMalformedElement(element: String, description: String)
 }
 
 /// The type describing how to create a value of type `a` from a String.
@@ -198,6 +201,37 @@ pub fn parse(
       let split_columns =
         partition_on_unescaped_(separator: column_separator, not_in: escaper)
 
+      let trim_whitespace = fn(element: String) -> String {
+        element
+        |> case trim_start {
+          True -> string.trim_start
+          False -> function.identity
+        }
+        |> case trim_end {
+          True -> string.trim_end
+          False -> function.identity
+        }
+      }
+
+      let unwrap = fn(element: String) -> Result(String, ParsingError) {
+        case
+          string.starts_with(element, escaper),
+          string.ends_with(element, escaper)
+        {
+          True, True ->
+            Ok(
+              element
+              |> string.remove_prefix(escaper)
+              |> string.remove_suffix(escaper),
+            )
+          False, False -> Ok(element)
+          _, _ ->
+            Error(EncounteredMalformedElement(element, "Mismatched escapers"))
+        }
+      }
+
+      let unescape = unescape(escaper, [#(escaper, escaper <> escaper)])
+
       // If the headers are the same as expected, or the user didn't care and didn't specify them, they are in this value.
       // But if they weren't as expected, this use statement means the rest of the function is not executed.
       use _headers <- result.try(process_headers(
@@ -209,14 +243,23 @@ pub fn parse(
       let process_row = fn(elements: List(String)) -> Result(a, ParsingError) {
         elements
         // TODO : The `unescape` mapping function should go here, plus the trimming of whitespace
-        |> parse()
-        |> result.try(fn(output: #(a, List(String))) -> Result(a, ParsingError) {
-          let #(value, leftovers) = output
-          case strict_columns, leftovers {
-            False, _ -> Ok(value)
-            True, [] -> Ok(value)
-            True, _ -> Error(StrictParsedWithLeftovers(leftovers))
-          }
+        |> list.map(trim_whitespace)
+        |> list.map(unwrap)
+        |> result.all()
+        |> result.try(fn(elements: List(String)) -> Result(a, ParsingError) {
+          elements
+          |> parse()
+          |> result.try(fn(output: #(a, List(String))) -> Result(
+            a,
+            ParsingError,
+          ) {
+            let #(value, leftovers) = output
+            case strict_columns, leftovers {
+              False, _ -> Ok(value)
+              True, [] -> Ok(value)
+              True, _ -> Error(StrictParsedWithLeftovers(leftovers))
+            }
+          })
         })
       }
 
@@ -230,6 +273,36 @@ pub fn parse(
         |> result.partition(),
       )
     }
+  }
+}
+
+/// Internal helper function for creating a function for 'unescaping' an element
+/// (for each `rule`, replacing the second element in the tuple with the first).
+/// 
+/// ### Function Declaration
+/// ```gleam
+/// unescape(rules: List(#(String, String))) -> fn(String) -> String
+/// ```
+/// 
+/// This function takes in a String that is guaranteed to be a value - that is, it's either unescaped,
+/// or it starts with an escaper and ends with an escaper.
+/// 
+/// It's a curried function because I like functional programming, and because it *should* give some performance improvements
+/// if I create such a function before any looping instead of constructing one for each iteration.
+/// 
+fn unescape(
+  escaper: String,
+  rules: List(#(String, String)),
+) -> fn(String) -> String {
+  fn(el: String) -> String {
+    rules
+    |> list.map(fn(rule: #(String, String)) -> fn(String) -> String {
+      string.replace(each: rule.1, with: rule.0, in: _)
+    })
+    |> list.fold(
+      el |> string.remove_prefix(escaper) |> string.remove_suffix(escaper),
+      fn(acc: String, rule: fn(String) -> String) -> String { rule(acc) },
+    )
   }
 }
 

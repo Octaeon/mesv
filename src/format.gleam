@@ -138,7 +138,7 @@ fn needs_escaping(prohibited: List(String)) -> fn(String) -> Bool {
 /// 
 /// ### Function Declaration
 /// ```gleam
-/// needs_escaping(el: String, prohibited: List(String)) -> Bool
+/// escape(rules: List(#(String, String))) -> fn(String) -> String
 /// ```
 /// 
 /// It's a curried function because I like functional programming, and because it *should* give some performance improvements
@@ -160,7 +160,7 @@ fn escape(rules: List(#(String, String))) -> fn(String) -> String {
 /// 
 /// ### Function Declaration
 /// ```gleam
-/// needs_escaping(el: String, prohibited: List(String)) -> Bool
+/// wrap(in in: String) -> fn(String) -> String
 /// ```
 /// 
 /// It's a curried function because I like functional programming, and because it *should* give some performance improvements
