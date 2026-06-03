@@ -26,7 +26,7 @@ fn build_test_unit_parser(
   |> parse.set_escaper(escaper)
 }
 
-pub fn default_normal_test() {
+pub fn default_normal_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "\""
@@ -40,7 +40,7 @@ pub fn default_normal_test() {
     as "Parsing default parameters | Normal"
 }
 
-pub fn default_column_separator_test() {
+pub fn default_column_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "\""
@@ -54,7 +54,7 @@ pub fn default_column_separator_test() {
     as "Parsing default parameters | Column separator"
 }
 
-pub fn default_row_separator_test() {
+pub fn default_row_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "\""
@@ -68,7 +68,7 @@ pub fn default_row_separator_test() {
     as "Parsing default parameters | Row separator"
 }
 
-pub fn default_escaper_test() {
+pub fn default_escaper_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "\""
@@ -83,7 +83,7 @@ pub fn default_escaper_test() {
 }
 
 // Custom column separator tests
-pub fn custom_col_normal_test() {
+pub fn custom_col_normal_test() -> Nil {
   let col_sep = "|"
   let row_sep = "\n"
   let esc = "\""
@@ -97,7 +97,7 @@ pub fn custom_col_normal_test() {
     as "Parsing custom column separator | Normal"
 }
 
-pub fn custom_col_column_separator_test() {
+pub fn custom_col_column_separator_test() -> Nil {
   let col_sep = "|"
   let row_sep = "\n"
   let esc = "\""
@@ -111,7 +111,7 @@ pub fn custom_col_column_separator_test() {
     as "Parsing custom column separator | Column separator"
 }
 
-pub fn custom_col_row_separator_test() {
+pub fn custom_col_row_separator_test() -> Nil {
   let col_sep = "|"
   let row_sep = "\n"
   let esc = "\""
@@ -125,7 +125,7 @@ pub fn custom_col_row_separator_test() {
     as "Parsing custom column separator | Row separator"
 }
 
-pub fn custom_col_escaper_test() {
+pub fn custom_col_escaper_test() -> Nil {
   let col_sep = "|"
   let row_sep = "\n"
   let esc = "\""
@@ -140,7 +140,7 @@ pub fn custom_col_escaper_test() {
 }
 
 // Custom row separator tests
-pub fn custom_row_normal_test() {
+pub fn custom_row_normal_test() -> Nil {
   let col_sep = ","
   let row_sep = "|"
   let esc = "\""
@@ -154,7 +154,7 @@ pub fn custom_row_normal_test() {
     as "Parsing custom row separator | Normal"
 }
 
-pub fn custom_row_column_separator_test() {
+pub fn custom_row_column_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "|"
   let esc = "\""
@@ -168,7 +168,7 @@ pub fn custom_row_column_separator_test() {
     as "Parsing custom row separator | Column separator"
 }
 
-pub fn custom_row_row_separator_test() {
+pub fn custom_row_row_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "|"
   let esc = "\""
@@ -182,7 +182,7 @@ pub fn custom_row_row_separator_test() {
     as "Parsing custom row separator | Row separator"
 }
 
-pub fn custom_row_escaper_test() {
+pub fn custom_row_escaper_test() -> Nil {
   let col_sep = ","
   let row_sep = "|"
   let esc = "\""
@@ -197,7 +197,7 @@ pub fn custom_row_escaper_test() {
 }
 
 // Custom escaper tests
-pub fn custom_esc_normal_test() {
+pub fn custom_esc_normal_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "'"
@@ -211,7 +211,7 @@ pub fn custom_esc_normal_test() {
     as "Parsing custom escaper | Normal"
 }
 
-pub fn custom_esc_column_separator_test() {
+pub fn custom_esc_column_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "'"
@@ -225,7 +225,7 @@ pub fn custom_esc_column_separator_test() {
     as "Parsing custom escaper | Column separator"
 }
 
-pub fn custom_esc_row_separator_test() {
+pub fn custom_esc_row_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "'"
@@ -239,7 +239,7 @@ pub fn custom_esc_row_separator_test() {
     as "Parsing custom escaper | Row separator"
 }
 
-pub fn custom_esc_escaper_test() {
+pub fn custom_esc_escaper_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "'"
@@ -254,7 +254,7 @@ pub fn custom_esc_escaper_test() {
 }
 
 // Combined tests
-pub fn combined_normal_test() {
+pub fn combined_normal_test() -> Nil {
   let col_sep = "|"
   let row_sep = ";"
   let esc = "'"
@@ -268,7 +268,7 @@ pub fn combined_normal_test() {
     as "Parsing combined | Normal"
 }
 
-pub fn combined_column_separator_test() {
+pub fn combined_column_separator_test() -> Nil {
   let col_sep = "|"
   let row_sep = ";"
   let esc = "'"
@@ -282,7 +282,7 @@ pub fn combined_column_separator_test() {
     as "Parsing combined | Column separator"
 }
 
-pub fn combined_row_separator_test() {
+pub fn combined_row_separator_test() -> Nil {
   let col_sep = "|"
   let row_sep = ";"
   let esc = "'"
@@ -296,7 +296,7 @@ pub fn combined_row_separator_test() {
     as "Parsing combined | Row separator"
 }
 
-pub fn combined_escaper_test() {
+pub fn combined_escaper_test() -> Nil {
   let col_sep = "|"
   let row_sep = ";"
   let esc = "'"

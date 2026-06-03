@@ -69,14 +69,14 @@ fn wrap(val: a) -> Result(#(a, _), _) {
   Ok(#(val, []))
 }
 
-pub fn default_normal_test() {
+pub fn default_normal_test() -> Nil {
   let parsed = build_test_unit(",", "\n", "\"")
 
   assert parsed(mesv_test.normal_data()) == wrap(mesv_test.normal_data())
     as "Round trip default parameters | Normal"
 }
 
-pub fn default_column_separator_test() {
+pub fn default_column_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "\""
@@ -87,7 +87,7 @@ pub fn default_column_separator_test() {
     as "Round trip default parameters | Column separator"
 }
 
-pub fn default_row_separator_test() {
+pub fn default_row_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "\""
@@ -98,7 +98,7 @@ pub fn default_row_separator_test() {
     as "Round trip default parameters | Row separator"
 }
 
-pub fn default_escaper_test() {
+pub fn default_escaper_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "\""
@@ -110,7 +110,7 @@ pub fn default_escaper_test() {
 }
 
 // Custom column separator tests
-pub fn custom_col_normal_test() {
+pub fn custom_col_normal_test() -> Nil {
   let col_sep = "|"
   let row_sep = "\n"
   let esc = "\""
@@ -120,7 +120,7 @@ pub fn custom_col_normal_test() {
     as "Round trip custom column separator | Normal"
 }
 
-pub fn custom_col_column_separator_test() {
+pub fn custom_col_column_separator_test() -> Nil {
   let col_sep = "|"
   let row_sep = "\n"
   let esc = "\""
@@ -131,7 +131,7 @@ pub fn custom_col_column_separator_test() {
     as "Round trip custom column separator | Column separator"
 }
 
-pub fn custom_col_row_separator_test() {
+pub fn custom_col_row_separator_test() -> Nil {
   let col_sep = "|"
   let row_sep = "\n"
   let esc = "\""
@@ -142,7 +142,7 @@ pub fn custom_col_row_separator_test() {
     as "Round trip custom column separator | Row separator"
 }
 
-pub fn custom_col_escaper_test() {
+pub fn custom_col_escaper_test() -> Nil {
   let col_sep = "|"
   let row_sep = "\n"
   let esc = "\""
@@ -154,7 +154,7 @@ pub fn custom_col_escaper_test() {
 }
 
 // Custom row separator tests
-pub fn custom_row_normal_test() {
+pub fn custom_row_normal_test() -> Nil {
   let col_sep = ","
   let row_sep = "|"
   let esc = "\""
@@ -164,7 +164,7 @@ pub fn custom_row_normal_test() {
     as "Round trip custom row separator | Normal"
 }
 
-pub fn custom_row_column_separator_test() {
+pub fn custom_row_column_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "|"
   let esc = "\""
@@ -175,7 +175,7 @@ pub fn custom_row_column_separator_test() {
     as "Round trip custom row separator | Column separator"
 }
 
-pub fn custom_row_row_separator_test() {
+pub fn custom_row_row_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "|"
   let esc = "\""
@@ -186,7 +186,7 @@ pub fn custom_row_row_separator_test() {
     as "Round trip custom row separator | Row separator"
 }
 
-pub fn custom_row_escaper_test() {
+pub fn custom_row_escaper_test() -> Nil {
   let col_sep = ","
   let row_sep = "|"
   let esc = "\""
@@ -198,7 +198,7 @@ pub fn custom_row_escaper_test() {
 }
 
 // Custom escaper tests
-pub fn custom_esc_normal_test() {
+pub fn custom_esc_normal_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "'"
@@ -208,7 +208,7 @@ pub fn custom_esc_normal_test() {
     as "Round trip custom escaper | Normal"
 }
 
-pub fn custom_esc_column_separator_test() {
+pub fn custom_esc_column_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "'"
@@ -219,7 +219,7 @@ pub fn custom_esc_column_separator_test() {
     as "Round trip custom escaper | Column separator"
 }
 
-pub fn custom_esc_row_separator_test() {
+pub fn custom_esc_row_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "'"
@@ -230,7 +230,7 @@ pub fn custom_esc_row_separator_test() {
     as "Round trip custom escaper | Row separator"
 }
 
-pub fn custom_esc_escaper_test() {
+pub fn custom_esc_escaper_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "'"
@@ -242,7 +242,7 @@ pub fn custom_esc_escaper_test() {
 }
 
 // Combined tests
-pub fn combined_normal_test() {
+pub fn combined_normal_test() -> Nil {
   let col_sep = "|"
   let row_sep = ";"
   let esc = "'"
@@ -252,7 +252,7 @@ pub fn combined_normal_test() {
     as "Round trip combined | Normal"
 }
 
-pub fn combined_column_separator_test() {
+pub fn combined_column_separator_test() -> Nil {
   let col_sep = "|"
   let row_sep = ";"
   let esc = "'"
@@ -263,7 +263,7 @@ pub fn combined_column_separator_test() {
     as "Round trip combined | Column separator"
 }
 
-pub fn combined_row_separator_test() {
+pub fn combined_row_separator_test() -> Nil {
   let col_sep = "|"
   let row_sep = ";"
   let esc = "'"
@@ -274,7 +274,7 @@ pub fn combined_row_separator_test() {
     as "Round trip combined | Row separator"
 }
 
-pub fn combined_escaper_test() {
+pub fn combined_escaper_test() -> Nil {
   let col_sep = "|"
   let row_sep = ";"
   let esc = "'"
