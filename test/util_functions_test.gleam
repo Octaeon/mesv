@@ -94,7 +94,7 @@ pub fn count_occurences_list_test() -> Nil {
 pub fn count_occurences_word_test() -> Nil {
   let data =
     "I want to count the number of multi-character strings in this sentence, to check if my function works for finding Strings that are more than a single character.
-to do this, I will need to use a sliding window instead of consuming the input one character by one character"
+    to do this, I will need to use a sliding window instead of consuming the input one character by one character"
   assert util.count_occurences(of: "to", in: data) == 4
     as "Count Occurences | Count occurences of multi-character substrings"
 }
