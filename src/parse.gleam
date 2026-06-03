@@ -1,8 +1,10 @@
 import gleam/function
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/pair
 import gleam/result
 import gleam/string
+import util
 
 /// An error type representing any kind of error encountered when parsing.
 /// 
@@ -280,14 +282,22 @@ pub fn parse(
       // So just map over the `List(String)` of rows and try to parse each of them,
       // and then partition the `List(Result(a, ParsingError))` into `#(List(a), List(ParsingError))`
       Ok(
-        contents
+        // A hacky solution to append the first line to the contents if the user didn't provide
+        // an expected header pattern.
+        case headers {
+          Some(_) -> contents
+          None -> [found_headers, ..contents]
+        }
         |> list.map(fn(row_string) {
           // All of the parsing functions are condensed here to avoid having to map multiple times.
           row_string
           |> split_columns()
           |> process_row()
         })
-        |> result.partition(),
+        // Fucking hell, the partitiion function reverses the order of both lists. Without testing I would have missed this bug
+        |> result.partition()
+        |> pair.map_first(list.reverse)
+        |> pair.map_second(list.reverse),
       )
     }
   }
@@ -348,51 +358,29 @@ fn process_headers(
 /// partition_on_unescaped_(separator el: String, not_in escaper: String) -> fn(String) -> List(String)
 /// ```
 /// 
-fn partition_on_unescaped_(
+pub fn partition_on_unescaped_(
   separator el: String,
   not_in escaper: String,
 ) -> fn(String) -> List(String) {
   // TODO : Maybe instead of checking for escapers on both the beginning and the end, we should count the number of escapers and check if it's an even number?
   // Since according to the [CSV specification](https://www.ietf.org/rfc/rfc4180.txt), the syntax of the format ensures that for every element,
   // the doubleQuotes that are used as escapers must be even.
+  // Yep, that is what should be done.
+  // In case of row separators, the escaper can appear before the row separator but not be at the beginning of the string,
+  // since the value that contains the row separator is not the first in that row.
+  // However, in that case the count of escapers in the first part of the string will be odd, thus being the property we should check.
   fn(to_split: String) -> List(String) {
     to_split
     // First split the string on the separator
     |> string.split(on: el)
     // Then traverse the List and merge any two Strings that don't form a cell together
-    |> list_merge_map(fn(first: String, second: String) -> Option(String) {
-      // If the first string starts with an escaper but does not end in one, then merge the two
-      case
-        string.starts_with(first, escaper) && !string.ends_with(first, escaper)
-      {
+    |> util.list_merge_map(fn(first: String, second: String) -> Option(String) {
+      // If the first string contains an odd number of escaper Strings, merge the two
+      case util.count_occurences(of: escaper, in: first) % 2 == 1 {
         // I almost forgot to readd the separator when merging the strings.
         True -> Some(first <> el <> second)
         False -> None
       }
     })
-  }
-}
-
-/// Internal helper function that traverses a list, calling the `merge` function on all consecutive elements.
-/// 
-/// If the function returns `Some(a)`, then the two elements are replaced with the contents, and if it returns `None`,
-/// the function advances to the next pair of elements.
-pub fn list_merge_map(list: List(a), merge: fn(a, a) -> Option(a)) -> List(a) {
-  list_merge_map_loop(list, merge, [])
-}
-
-pub fn list_merge_map_loop(
-  list: List(a),
-  merge: fn(a, a) -> Option(a),
-  acc: List(a),
-) -> List(a) {
-  case list {
-    [] -> list.reverse(acc)
-    [last] -> list.reverse([last, ..acc])
-    [first, second, ..rest] ->
-      case merge(first, second) {
-        Some(merged) -> list_merge_map_loop([merged, ..rest], merge, acc)
-        None -> list_merge_map_loop([second, ..rest], merge, [first, ..acc])
-      }
   }
 }

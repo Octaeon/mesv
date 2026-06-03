@@ -1,0 +1,100 @@
+import gleam/list
+import parse
+import util
+
+pub fn partition_on_unescaped_base_test() -> Nil {
+  let in = "should,split,on,these,commas"
+  assert parse.partition_on_unescaped_(separator: ",", not_in: "\"")(in)
+    == ["should", "split", "on", "these", "commas"]
+    as "Partition on Unescaped | Base case equivalent to string.split"
+}
+
+pub fn partition_on_unescaped_one_escaped_test() -> Nil {
+  let in = "should,split,on,these,commas,but,not,\"on this,one\",continued"
+  assert parse.partition_on_unescaped_(separator: ",", not_in: "\"")(in)
+    == [
+      "should",
+      "split",
+      "on",
+      "these",
+      "commas",
+      "but",
+      "not",
+      "\"on this,one\"",
+      "continued",
+    ]
+    as "Partition on Unescaped | Strings starting with escapers"
+}
+
+pub fn partition_on_unescaped_nested_escaper_test() -> Nil {
+  let in = "now,for,rows\nthese,should,work\nand,\"this\none\",too"
+  assert parse.partition_on_unescaped_(separator: "\n", not_in: "\"")(in)
+    == ["now,for,rows", "these,should,work", "and,\"this\none\",too"]
+    as "Partition on Unescaped | Escaper in the middle"
+}
+
+pub fn partition_on_unescaped_nested_multiple_escaper_test() -> Nil {
+  let in =
+    "now,for,rows\nthese,should,work\nand,\"this\none, with \"\"more escapers\"\"\",too"
+  assert parse.partition_on_unescaped_(separator: "\n", not_in: "\"")(in)
+    == [
+      "now,for,rows",
+      "these,should,work",
+      "and,\"this\none, with \"\"more escapers\"\"\",too",
+    ]
+    as "Partition on Unescaped | Multiple escapers in the middle"
+}
+
+pub fn count_occurences_empty_string_test() -> Nil {
+  assert util.count_occurences(of: "\"", in: "") == 0
+    as "Count Occurences | Empty string search"
+}
+
+pub fn count_occurences_empty_search_test() -> Nil {
+  assert util.count_occurences(of: "", in: "What is it even searching for?")
+    == 30
+    as "Count Occurences | Search for empty string"
+}
+
+pub fn count_occurences_none_test() -> Nil {
+  assert util.count_occurences(of: ",", in: "and this") == 0
+    as "Count Occurences | Base case"
+}
+
+pub fn count_occurences_basic_test() -> Nil {
+  assert util.count_occurences(of: ",", in: "and, this") == 1
+    as "Count Occurences | Basic case"
+}
+
+pub fn count_occurences_invisible_characters_test() -> Nil {
+  assert util.count_occurences(
+      of: "\n",
+      in: "basically\nequivalent\nto\ncounting\nhow many\nlines\nthere are",
+    )
+    == 6
+    as "Count Occurences | Invisible characters"
+}
+
+pub fn count_occurences_list_test() -> Nil {
+  let data = [
+    #("whatever", "e", 2),
+    #("maybe count \"doublequotes\"", "\"", 2),
+    #(
+      "\"OH NO, I FORGOT TO \"\"**ESCAPE**\"\" THE LAST TEST CASE!!!!\"",
+      "\"",
+      6,
+    ),
+    #("I'm running out of ideas...", " ", 4),
+  ]
+  assert list.map(data, fn(a) { util.count_occurences(of: a.1, in: a.0) })
+    == list.map(data, fn(a) { a.2 })
+    as "Count Occurences | List of tests"
+}
+
+pub fn count_occurences_word_test() -> Nil {
+  let data =
+    "I want to count the number of multi-character strings in this sentence, to check if my function works for finding Strings that are more than a single character.
+to do this, I will need to use a sliding window instead of consuming the input one character by one character"
+  assert util.count_occurences(of: "to", in: data) == 4
+    as "Count Occurences | Count occurences of multi-character substrings"
+}
