@@ -59,7 +59,7 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
 /// 
 pub fn column(
   parser: Parser(fn(a) -> b),
-  parse: fn(String) -> Result(a, ParsingError),
+  parse: fn(String) -> Result(a, Nil),
 ) -> Parser(b) {
   Parser(..parser, parse: fn(tokens: List(String)) {
     use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
@@ -72,6 +72,9 @@ pub fn column(
         // TODO: Should I process the elements here, or no? I'm not sure
         token
         |> parse()
+        |> result.map_error(fn(_) {
+          CantParseRow(-1, token, "idk, think of a better error system.")
+        })
         |> result.map(constructor)
         |> result.map(fn(b) { #(b, rest) })
 

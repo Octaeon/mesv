@@ -1,5 +1,4 @@
 import gleam/int
-import gleam/result
 import mesv
 import mesv/parse.{type Parser}
 import mesv_test.{type RowData, RowData}
@@ -16,10 +15,7 @@ fn build_test_unit_parser(
     RowData(name, age, comment)
   })
   |> parse.column(Ok)
-  |> parse.column(fn(a) {
-    int.parse(a)
-    |> result.map_error(fn(_) { parse.CantParseRow(0, a, "Can't parse to int") })
-  })
+  |> parse.column(int.parse)
   |> parse.column(Ok)
   |> parse.set_col_sep(col_sep)
   |> parse.set_row_sep(row_sep)
