@@ -1,53 +1,6 @@
 import format.{type Formatter}
 import gleam/int
-
-type RowData {
-  RowData(name: String, age: Int, comment: String)
-}
-
-const normal_data: List(RowData) = [
-  RowData("Alex", 23, "This is a pretty cool library"),
-  RowData("Bartholemew", 24, "Yeah I agree"),
-]
-
-fn column_separator_data(column_separator: String) -> List(RowData) {
-  [
-    RowData("Alex", 23, "This is a pretty good library, don't you think?"),
-    RowData(
-      "Bartholemew",
-      24,
-      "Yeah, it's pretty good, but are you sure it can handle escaping separators? Try "
-        <> column_separator
-        <> " this. heh",
-    ),
-  ]
-}
-
-fn row_separator_data(row_separator: String) -> List(RowData) {
-  [
-    RowData("Alex", 23, "It should be able to, right?"),
-    RowData(
-      "Bartholemew",
-      24,
-      "Maybe column separators,"
-        <> row_separator
-        <> "but what about row separators?",
-    ),
-  ]
-}
-
-fn escaper_data(escaper: String) -> List(RowData) {
-  [
-    RowData("Bartholemew", 24, "Huh, it worked. Now only escapers remain."),
-    RowData("Alex", 23, "What are escapers?"),
-    RowData(
-      "Bartholemew",
-      24,
-      "They're what wrap a value if it contains reserved elements. Right now, it's "
-        <> escaper,
-    ),
-  ]
-}
+import mesv_test.{type RowData, RowData}
 
 fn format_row_data(row: RowData) -> List(String) {
   let RowData(name, age, comment) = row
@@ -73,11 +26,11 @@ pub fn default_normal_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(normal_data)
+    |> format.format(mesv_test.normal_data())
 
   assert formatted
     == "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"
-    as "Default parameters, normal data test"
+    as "Formatting default parameters | Normal"
 }
 
 pub fn default_column_separator_test() {
@@ -86,11 +39,11 @@ pub fn default_column_separator_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(column_separator_data(col_sep))
+    |> format.format(mesv_test.column_separator_data(col_sep))
 
   assert formatted
     == "Alex,23,\"This is a pretty good library, don't you think?\"\nBartholemew,24,\"Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\""
-    as "Default parameters, column separator data test"
+    as "Formatting default parameters | Column separator"
 }
 
 pub fn default_row_separator_test() {
@@ -99,11 +52,11 @@ pub fn default_row_separator_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(row_separator_data(row_sep))
+    |> format.format(mesv_test.row_separator_data(row_sep))
 
   assert formatted
     == "Alex,23,\"It should be able to, right?\"\nBartholemew,24,\"Maybe column separators,\nbut what about row separators?\""
-    as "Default parameters, row separator data test"
+    as "Formatting default parameters | Row separator"
 }
 
 pub fn default_escaper_test() {
@@ -112,11 +65,11 @@ pub fn default_escaper_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(escaper_data(esc))
+    |> format.format(mesv_test.escaper_data(esc))
 
   assert formatted
     == "Bartholemew,24,\"Huh, it worked. Now only escapers remain.\"\nAlex,23,What are escapers?\nBartholemew,24,\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\""
-    as "Default parameters, escaper data test"
+    as "Formatting default parameters | Escaper"
 }
 
 // Custom column separator tests
@@ -126,11 +79,11 @@ pub fn custom_col_normal_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(normal_data)
+    |> format.format(mesv_test.normal_data())
 
   assert formatted
     == "Alex|23|This is a pretty cool library\nBartholemew|24|Yeah I agree"
-    as "Custom column separator, normal data test"
+    as "Formatting custom column separator | Normal"
 }
 
 pub fn custom_col_column_separator_test() {
@@ -139,11 +92,11 @@ pub fn custom_col_column_separator_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(column_separator_data(col_sep))
+    |> format.format(mesv_test.column_separator_data(col_sep))
 
   assert formatted
     == "Alex|23|This is a pretty good library, don't you think?\nBartholemew|24|\"Yeah, it's pretty good, but are you sure it can handle escaping separators? Try | this. heh\""
-    as "Custom column separator, column separator data test"
+    as "Formatting custom column separator | Column separator"
 }
 
 pub fn custom_col_row_separator_test() {
@@ -152,11 +105,11 @@ pub fn custom_col_row_separator_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(row_separator_data(row_sep))
+    |> format.format(mesv_test.row_separator_data(row_sep))
 
   assert formatted
     == "Alex|23|It should be able to, right?\nBartholemew|24|\"Maybe column separators,\nbut what about row separators?\""
-    as "Custom column separator, row separator data test"
+    as "Formatting custom column separator | Row separator"
 }
 
 pub fn custom_col_escaper_test() {
@@ -165,11 +118,11 @@ pub fn custom_col_escaper_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(escaper_data(esc))
+    |> format.format(mesv_test.escaper_data(esc))
 
   assert formatted
     == "Bartholemew|24|Huh, it worked. Now only escapers remain.\nAlex|23|What are escapers?\nBartholemew|24|\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\""
-    as "Custom column separator, escaper data test"
+    as "Formatting custom column separator | Escaper"
 }
 
 // Custom row separator tests
@@ -179,11 +132,11 @@ pub fn custom_row_normal_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(normal_data)
+    |> format.format(mesv_test.normal_data())
 
   assert formatted
     == "Alex,23,This is a pretty cool library|Bartholemew,24,Yeah I agree"
-    as "Custom row separator, normal data test"
+    as "Formatting custom row separator | Normal"
 }
 
 pub fn custom_row_column_separator_test() {
@@ -192,11 +145,11 @@ pub fn custom_row_column_separator_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(column_separator_data(col_sep))
+    |> format.format(mesv_test.column_separator_data(col_sep))
 
   assert formatted
     == "Alex,23,\"This is a pretty good library, don't you think?\"|Bartholemew,24,\"Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\""
-    as "Custom row separator, column separator data test"
+    as "Formatting custom row separator | Column separator"
 }
 
 pub fn custom_row_row_separator_test() {
@@ -205,11 +158,11 @@ pub fn custom_row_row_separator_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(row_separator_data(row_sep))
+    |> format.format(mesv_test.row_separator_data(row_sep))
 
   assert formatted
     == "Alex,23,\"It should be able to, right?\"|Bartholemew,24,\"Maybe column separators,|but what about row separators?\""
-    as "Custom row separator, row separator data test"
+    as "Formatting custom row separator | Row separator"
 }
 
 pub fn custom_row_escaper_test() {
@@ -218,11 +171,11 @@ pub fn custom_row_escaper_test() {
   let esc = "\""
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(escaper_data(esc))
+    |> format.format(mesv_test.escaper_data(esc))
 
   assert formatted
     == "Bartholemew,24,\"Huh, it worked. Now only escapers remain.\"|Alex,23,What are escapers?|Bartholemew,24,\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\""
-    as "Custom row separator, escaper data test"
+    as "Formatting custom row separator | Escaper"
 }
 
 // Custom escaper tests
@@ -232,11 +185,11 @@ pub fn custom_esc_normal_test() {
   let esc = "'"
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(normal_data)
+    |> format.format(mesv_test.normal_data())
 
   assert formatted
     == "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"
-    as "Custom escaper, normal data test"
+    as "Formatting custom escaper | Normal"
 }
 
 pub fn custom_esc_column_separator_test() {
@@ -245,11 +198,11 @@ pub fn custom_esc_column_separator_test() {
   let esc = "'"
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(column_separator_data(col_sep))
+    |> format.format(mesv_test.column_separator_data(col_sep))
 
   assert formatted
     == "Alex,23,'This is a pretty good library, don''t you think?'\nBartholemew,24,'Yeah, it''s pretty good, but are you sure it can handle escaping separators? Try , this. heh'"
-    as "Custom escaper, column separator data test"
+    as "Formatting custom escaper | Column separator"
 }
 
 pub fn custom_esc_row_separator_test() {
@@ -258,11 +211,11 @@ pub fn custom_esc_row_separator_test() {
   let esc = "'"
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(row_separator_data(row_sep))
+    |> format.format(mesv_test.row_separator_data(row_sep))
 
   assert formatted
     == "Alex,23,'It should be able to, right?'\nBartholemew,24,'Maybe column separators,\nbut what about row separators?'"
-    as "Custom escaper, row separator data test"
+    as "Formatting custom escaper | Row separator"
 }
 
 pub fn custom_esc_escaper_test() {
@@ -271,11 +224,11 @@ pub fn custom_esc_escaper_test() {
   let esc = "'"
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(escaper_data(esc))
+    |> format.format(mesv_test.escaper_data(esc))
 
   assert formatted
     == "Bartholemew,24,'Huh, it worked. Now only escapers remain.'\nAlex,23,What are escapers?\nBartholemew,24,'They''re what wrap a value if it contains reserved elements. Right now, it''s '''"
-    as "Custom escaper, escaper data test"
+    as "Formatting custom escaper | Escaper"
 }
 
 // Combined tests
@@ -285,11 +238,11 @@ pub fn combined_normal_test() {
   let esc = "'"
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(normal_data)
+    |> format.format(mesv_test.normal_data())
 
   assert formatted
     == "Alex|23|This is a pretty cool library;Bartholemew|24|Yeah I agree"
-    as "All custom parameters, normal data test"
+    as "Formatting combined | Normal"
 }
 
 pub fn combined_column_separator_test() {
@@ -298,11 +251,11 @@ pub fn combined_column_separator_test() {
   let esc = "'"
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(column_separator_data(col_sep))
+    |> format.format(mesv_test.column_separator_data(col_sep))
 
   assert formatted
     == "Alex|23|'This is a pretty good library, don''t you think?';Bartholemew|24|'Yeah, it''s pretty good, but are you sure it can handle escaping separators? Try | this. heh'"
-    as "All custom parameters, column separator data test"
+    as "Formatting combined | Column separator"
 }
 
 pub fn combined_row_separator_test() {
@@ -311,11 +264,11 @@ pub fn combined_row_separator_test() {
   let esc = "'"
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(row_separator_data(row_sep))
+    |> format.format(mesv_test.row_separator_data(row_sep))
 
   assert formatted
     == "Alex|23|It should be able to, right?;Bartholemew|24|'Maybe column separators,;but what about row separators?'"
-    as "All custom parameters, row separator data test"
+    as "Formatting combined | Row separator"
 }
 
 pub fn combined_escaper_test() {
@@ -324,9 +277,9 @@ pub fn combined_escaper_test() {
   let esc = "'"
   let formatted =
     build_test_unit_formatter(format_row_data, col_sep, row_sep, esc)
-    |> format.format(escaper_data(esc))
+    |> format.format(mesv_test.escaper_data(esc))
 
   assert formatted
     == "Bartholemew|24|Huh, it worked. Now only escapers remain.;Alex|23|What are escapers?;Bartholemew|24|'They''re what wrap a value if it contains reserved elements. Right now, it''s '''"
-    as "All custom parameters, escaper data test"
+    as "Formatting combined | Escaper"
 }

@@ -51,6 +51,8 @@ pub fn count_occurences_empty_string_test() -> Nil {
 }
 
 pub fn count_occurences_empty_search_test() -> Nil {
+  // Due to how I implemented this function, I decided that when counting the number of occurences of
+  // empty strings in a string `a`, the output will be the length of `a`.
   assert util.count_occurences(of: "", in: "What is it even searching for?")
     == 30
     as "Count Occurences | Search for empty string"
@@ -58,7 +60,7 @@ pub fn count_occurences_empty_search_test() -> Nil {
 
 pub fn count_occurences_none_test() -> Nil {
   assert util.count_occurences(of: ",", in: "and this") == 0
-    as "Count Occurences | Base case"
+    as "Count Occurences | Zero present"
 }
 
 pub fn count_occurences_basic_test() -> Nil {
