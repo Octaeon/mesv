@@ -1,8 +1,8 @@
 import gleam/int
 import gleam/result
 import mesv
+import mesv/parse.{type Parser}
 import mesv_test.{type RowData, RowData}
-import parse.{type Parser}
 
 fn build_test_unit_parser(
   col_sep: String,

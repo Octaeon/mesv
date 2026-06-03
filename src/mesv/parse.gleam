@@ -4,20 +4,9 @@ import gleam/option.{type Option, None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
-import util
+import mesv/util
 
 /// An error type representing any kind of error encountered when parsing.
-/// 
-/// ### Type definition
-/// ```gleam
-/// pub type ParsingError {
-///   CantParseRow(index: Int, contents: String, reason: String)
-///   ExpectedHeadersMismatch(expected: List(String), found: List(String))
-///   RanOutOfValues
-///   StrictParsedWithLeftovers(leftovers: List(String))
-///   EncounteredMalformedElement(element: String, description: String)
-/// }
-/// ```
 /// 
 pub type ParsingError {
   CantParseRow(index: Int, contents: String, reason: String)
@@ -49,11 +38,6 @@ pub opaque type Parser(a) {
 
 /// Function for directly building a `Parser` that uses the subsequent elements in order
 /// 
-/// ### Function Declaration
-/// ```gleam
-/// build(f: fn(a) -> b) -> Parser(fn(a) -> b)
-/// ```
-/// 
 pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
   Parser(
     column_separator: ",",
@@ -72,11 +56,6 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
 }
 
 /// Function to build a `Parser`, by passing in a parsing function for a specified column.
-/// 
-/// ### Function Declaration
-/// ```gleam
-/// column(parser: Parser(fn(a) -> b), parse: fn(String) -> Result(a, ParsingError)) -> Parser(b)
-/// ```
 /// 
 pub fn column(
   parser: Parser(fn(a) -> b),
@@ -103,21 +82,11 @@ pub fn column(
 
 /// Function to specify that we expect the CSV headers to follow this exact format.
 /// 
-/// ### Function Declaration
-/// ```gleam
-/// expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a)
-/// ```
-/// 
 pub fn expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a) {
   Parser(..parser, expect_headers: Some(headers))
 }
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
-/// 
-/// ### Function Declaration
-/// ```gleam
-/// set_row_sep(parser: Parser(a), new_row_separator: String) -> Parser(a)
-/// ```
 /// 
 pub fn set_row_sep(parser: Parser(a), new_row_separator: String) -> Parser(a) {
   Parser(..parser, row_separator: new_row_separator)
@@ -125,21 +94,11 @@ pub fn set_row_sep(parser: Parser(a), new_row_separator: String) -> Parser(a) {
 
 /// Function to set a specific value escaper, instead of the default doublequotes (`"`)
 /// 
-/// ### Function Declaration
-/// ```gleam
-/// set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a)
-/// ```
-/// 
 pub fn set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a) {
   Parser(..parser, escaper: new_escaper)
 }
 
 /// Function to set whether the parser should trim the whitespace on both ends of each value.
-/// 
-/// ### Function Declaration
-/// ```gleam
-/// set_trim_whitespace(parser: Parser(a), trim_start: Bool, trim_end: Bool) -> Parser(a)
-/// ```
 /// 
 pub fn set_trim_whitespace(
   parser: Parser(a),
@@ -150,11 +109,6 @@ pub fn set_trim_whitespace(
 }
 
 /// Function to set a specific column separator, instead of the default comma (`,`)
-///
-/// ### Function Declaration
-/// ```gleam
-/// set_col_sep(parser: Parser(a), new_column_separator: String) -> Parser(a)
-/// ```
 /// 
 pub fn set_col_sep(
   parser: Parser(a),
@@ -164,11 +118,6 @@ pub fn set_col_sep(
 }
 
 /// Function to use the specified `Parser(a)` to transform the source into a `List(a)`
-/// 
-/// ### Function Declaration
-/// ```gleam
-/// parse(parser: Parser(a), source: String) -> Result(#(List(a), List(ParsingError)), ParsingError)
-/// ```
 /// 
 /// If the headers specified in the `expect_headers` function did not match the specified pattern, a `ParsingError` will be returned,
 /// of the type `ExpectedHeadersMismatch`, containing both the expected headers, and what was found.
@@ -306,11 +255,6 @@ pub fn parse(
 /// Internal helper function for creating a function for 'unescaping' an element
 /// (for each `rule`, replacing the second element in the tuple with the first).
 /// 
-/// ### Function Declaration
-/// ```gleam
-/// unescape(rules: List(#(String, String))) -> fn(String) -> String
-/// ```
-/// 
 /// This function takes in a String that is guaranteed to be a value - that is, it's either unescaped,
 /// or it starts with an escaper and ends with an escaper.
 /// 
@@ -332,11 +276,6 @@ fn unescape(rules: List(#(String, String))) -> fn(String) -> String {
 /// Internal helper function to check whether the CSV headers that were found match the expected pattern that was specified
 /// in the Parser building process.
 /// 
-/// ### Function Declaration
-/// ```gleam
-/// process_headers(expected: Option(List(String)), found: List(String)) -> Result(List(String), ParsingError)
-/// ```
-/// 
 fn process_headers(
   expected: Option(List(String)),
   found: List(String),
@@ -352,11 +291,6 @@ fn process_headers(
 }
 
 /// Internal helper function for constructing a function that splits a `String` on `el`, as long as the `el` is not between two `not_in`.
-/// 
-/// ### Function Declaration
-/// ```gleam
-/// partition_on_unescaped_(separator el: String, not_in escaper: String) -> fn(String) -> List(String)
-/// ```
 /// 
 pub fn partition_on_unescaped_(
   separator el: String,

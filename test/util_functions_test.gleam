@@ -1,6 +1,6 @@
 import gleam/list
-import parse
-import util
+import mesv/parse
+import mesv/util
 
 pub fn partition_on_unescaped_base_test() -> Nil {
   let in = "should,split,on,these,commas"

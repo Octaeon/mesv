@@ -1,5 +1,5 @@
-import format.{type Formatter}
 import gleam/int
+import mesv/format.{type Formatter}
 import mesv_test.{type RowData, RowData}
 
 fn format_row_data(row: RowData) -> List(String) {

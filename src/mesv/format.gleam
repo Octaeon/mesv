@@ -22,11 +22,6 @@ pub opaque type Formatter(a) {
 
 /// Function for directly building a `Formatter` that outputs the specified elements in an exact order
 /// 
-/// ### Function Declaration
-/// ```gleam
-/// build(f: fn(a) -> List(String)) -> Formatter(a)
-/// ```
-/// 
 pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
   Formatter(
     column_separator: ",",
@@ -40,11 +35,6 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
 /// 
-/// ### Function Declaration
-/// ```gleam
-/// set_row_sep(formatter: Formatter(a), new_row_separator: String) -> Formatter(a)
-/// ```
-/// 
 /// If the row separator chosen is longer than a single character, it might cause problems with performance later
 /// during parsing.
 /// 
@@ -56,11 +46,6 @@ pub fn set_row_sep(
 }
 
 /// Function to set a specific column separator, instead of the default comma (`,`)
-///
-/// ### Function Declaration
-/// ```gleam
-/// set_col_sep(formatter: Formatter(a), new_column_separator: String) -> Formatter(a)
-/// ```
 /// 
 /// If the column separator chosen is longer than a single character, it might cause problems with performance later
 /// during parsing.
@@ -75,11 +60,6 @@ pub fn set_col_sep(
 /// Function to manually set column headers in a particular order.
 /// 
 /// By default, the headers will not be written to output String.
-///
-/// ### Function Declaration
-/// ```gleam
-/// set_headers(formatter: Formatter(a), new_headers: List(String)) -> Formatter(a)
-/// ```
 /// 
 pub fn set_headers(
   formatter: Formatter(a),
@@ -90,11 +70,6 @@ pub fn set_headers(
 
 /// Function to set custom escaper
 /// (character that wraps the value if its' string contains row or column separators, or the escaper itself)
-///
-/// ### Function Declaration
-/// ```gleam
-/// set_escaper(formatter: Formatter(a), new_escaper: String) -> Formatter(a)
-/// ```
 /// 
 pub fn set_escaper(
   formatter: Formatter(a),
@@ -103,14 +78,9 @@ pub fn set_escaper(
   Formatter(..formatter, escaper: new_escaper)
 }
 
-/// Function to specify whether to wrap each value in an escaper, whether or not it's required.
+/// Function to specify whether to wrap each value in an escaper, regardles of necessity.
 /// 
 /// By default false.
-/// 
-/// ### Function Declaration
-/// ```gleam
-/// set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a)
-/// ```
 /// 
 pub fn set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a) {
   Formatter(..parser, escape_all: escape_all)
@@ -118,11 +88,6 @@ pub fn set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a) {
 
 /// Internal helper function for creating a function that checks if a specific element needs to be escaped
 /// (wrapped in escaper, which by default is `"`) before being written to file.
-/// 
-/// ### Function Declaration
-/// ```gleam
-/// needs_escaping(prohibited: List(String)) -> fn(String) -> Bool
-/// ```
 /// 
 /// It's a curried function because I like functional programming, and because it *should* give some performance improvements
 /// if I create such a function before any looping instead of constructing one for each iteration.
@@ -135,11 +100,6 @@ fn needs_escaping(prohibited: List(String)) -> fn(String) -> Bool {
 
 /// Internal helper function for creating a function for 'escaping' an element
 /// (for each `rule`, replacing the first element in the tuple with the second).
-/// 
-/// ### Function Declaration
-/// ```gleam
-/// escape(rules: List(#(String, String))) -> fn(String) -> String
-/// ```
 /// 
 /// It's a curried function because I like functional programming, and because it *should* give some performance improvements
 /// if I create such a function before any looping instead of constructing one for each iteration.
@@ -158,11 +118,6 @@ fn escape(rules: List(#(String, String))) -> fn(String) -> String {
 
 /// Internal helper function for creating a function that wraps a String in the specified 'escaper' String.
 /// 
-/// ### Function Declaration
-/// ```gleam
-/// wrap(in in: String) -> fn(String) -> String
-/// ```
-/// 
 /// It's a curried function because I like functional programming, and because it *should* give some performance improvements
 /// if I create such a function before any looping instead of constructing one for each iteration.
 /// 
@@ -174,11 +129,6 @@ fn wrap(in in: String) -> fn(String) -> String {
 /// 
 /// All of the configuration options need to be set when building the `Formatter`,
 /// so this function is very simple to understand.
-/// 
-/// ### Function Declaration
-/// ```gleam
-/// format(formatter: Formatter(a), elements: List(a)) -> String
-/// ```
 /// 
 pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
   let Formatter(

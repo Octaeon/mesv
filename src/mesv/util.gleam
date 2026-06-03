@@ -16,11 +16,6 @@ import gleam/string
 
 /// Internal helper function that traverses a list, calling the `merge` function on all consecutive elements.
 /// 
-/// ### Function Definition
-/// ```gleam
-/// list_merge_map(list: List(a), merge: fn(a, a) -> Option(a)) -> List(a)
-/// ```
-/// 
 /// If the function returns `Some(a)`, then the two elements are replaced with the contents, and if it returns `None`,
 /// the function advances to the next pair of elements.
 /// 
@@ -47,11 +42,6 @@ fn list_merge_map_loop(
 /// Internal helper function to count how many **non-overlapping** occurences of the first argument are in the second argument.
 /// 
 /// If there are none, this function returns the length of the second argument.
-/// 
-/// ### Function Definition
-/// ```gleam
-/// count_occurences(of find: String, in string: String) -> Int
-/// ```
 /// 
 pub fn count_occurences(of find: String, in in: String) -> Int {
   case string.is_empty(find) {

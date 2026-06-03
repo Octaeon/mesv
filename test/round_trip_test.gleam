@@ -5,12 +5,12 @@
 //// `a == parse(format(a))`, then using the `mesv.format` and `mesv.parse` modules to convert to csv and back will satisfy the condition
 //// `List(a) == mesv.parse(mesv.format(List(a)))`, no matter the specified separators and escapers.
 
-import format.{type Formatter}
 import gleam/int
 import gleam/result
 import mesv
+import mesv/format.{type Formatter}
+import mesv/parse.{type Parser}
 import mesv_test.{type RowData, RowData}
-import parse.{type Parser}
 
 fn build_test_unit_parser_and_formatter(
   col_sep: String,
