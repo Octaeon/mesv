@@ -1,23 +1,22 @@
 //// A file containing various utility functions that don't exactly fit into any of the other modules.
 //// 
-//// They are purely for internal use - but since most of them are generic, there's nothing stopping you, as the end user,
-//// from calling them in your own code.
+//// They are purely for internal use - but since most of them are generic, there's nothing stopping you, as the end user, from calling them in your own code.
 //// 
 //// However, beacause:
 ////  1. I doubt most people would find themselves in a situation where they need them
 ////  2. They are not particularly easy to understand
 //// 
-//// these functions are not considered part of the functionality provided by this library, and therefore
-//// are not documented that well.
+//// these functions are not considered part of the functionality provided by this library, and therefore are not documented that well.
 
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
 
-/// Internal helper function that traverses a list, calling the `merge` function on all consecutive elements.
+/// Internal helper function that traverses a list, calling the `merge` function on
+/// all consecutive elements.
 /// 
-/// If the function returns `Some(a)`, then the two elements are replaced with the contents, and if it returns `None`,
-/// the function advances to the next pair of elements.
+/// If the function returns `Some(a)`, then the two elements are replaced with the contents,
+/// and if it returns `None`, the function advances to the next pair of elements.
 /// 
 pub fn list_merge_map(list: List(a), merge: fn(a, a) -> Option(a)) -> List(a) {
   list_merge_map_loop(list, merge, [])
@@ -39,7 +38,8 @@ fn list_merge_map_loop(
   }
 }
 
-/// Internal helper function to count how many **non-overlapping** occurences of the first argument are in the second argument.
+/// Internal helper function to count how many **overlapping** occurences of the first argument
+/// appear in the second argument.
 /// 
 /// If there are none, this function returns the length of the second argument.
 /// 

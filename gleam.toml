@@ -1,6 +1,6 @@
 # Documentation and human-facing data
 name = "mesv"
-version = "0.1.0"
+version = "0.1.1"
 
 description = "Type-focused CSV parsing and formatting library with extensive configuration options and documentation examples."
 

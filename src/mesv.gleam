@@ -1,6 +1,9 @@
-//// A CSV parsing library that strongly enforces Data Integrity,
-//// allows for creation of both a formatter (`fn(data) -> String`) and parser (`fn(String) -> data`) from the same data type,
-//// and allows the user to add Frontmatter metadata to CSV files.
+//// A CSV parsing library that strongly enforces Data Integrity, allows for creation of both
+//// a formatter (`fn(data) -> String`) and parser (`fn(String) -> data`) from the same
+//// data type, and allows the user to add Frontmatter metadata to CSV files.
+//// 
+//// This root module is rather barren, as most of the relevant functionality is categorized
+//// into the two modules, `mesv.format` and `mesv.parse`.
 
 /// A subset of an identity function for 1-arity functions.
 /// 
