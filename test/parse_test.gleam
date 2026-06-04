@@ -53,6 +53,41 @@ pub fn default_normal_test() -> Nil {
     as "Parsing default parameters | Normal"
 }
 
+pub fn whitespace_test() -> Nil {
+  let parsed =
+    build_test_unit_parser(",", "\n", "\"")
+    |> parse.run(
+      "Alex,23,  This is a pretty cool library  \nBartholemew, 24,Yeah I agree",
+    )
+
+  assert parsed == Ok(expected_normal_data())
+    as "Parsing default parameters | Trimming whitespace"
+}
+
+pub fn escaped_whitespace_test() -> Nil {
+  let col_sep = ","
+  let parsed =
+    build_test_unit_parser(col_sep, "\n", "\"")
+    |> parse.run(
+      "Alex,23,\"   This is a pretty good library, don't you think?   \"\nBartholemew,24,\" Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\"",
+    )
+
+  assert parsed == Ok(expected_column_separator_data(col_sep))
+    as "Parsing default parameters | Trimming escaped whitespace"
+}
+
+pub fn padded_escaped_cell_test() -> Nil {
+  let col_sep = ","
+  let parsed =
+    build_test_unit_parser(col_sep, "\n", "\"")
+    |> parse.run(
+      "Alex,23,  \"This is a pretty good library, don't you think?   \" \n   Bartholemew,24, \" Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\"",
+    )
+
+  assert parsed == Ok(expected_column_separator_data(col_sep))
+    as "Parsing default parameters | Trimming escaped whitespace"
+}
+
 pub fn default_column_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"

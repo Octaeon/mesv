@@ -468,17 +468,26 @@ pub fn run(
     #(trim_start, trim_end),
   ) = parser
 
-  let split_rows =
-    partition_on_unescaped_(separator: row_separator, not_in: escaper)
+  let split_rows = split_on_unescaped(separator: row_separator, not_in: escaper)
 
   case split_rows(source) {
     [] -> Ok([])
     [found_headers, ..contents] -> {
       // A local instance of the `partition_on_unescaped_` function, specifically for splitting columns
       let split_columns =
-        partition_on_unescaped_(separator: column_separator, not_in: escaper)
+        split_on_unescaped(separator: column_separator, not_in: escaper)
 
-      let trim_whitespace = fn(element: String) -> String {
+      // If the headers are the same as expected, or the user didn't care and didn't specify them, they are in this value.
+      // But if they weren't as expected, this use statement means the rest of the function is not executed.
+      use _headers <- result.try(process_headers(
+        headers,
+        split_columns(found_headers),
+      ))
+
+      // Constructed function for trimming whitespace of cell contents (wrapped in escapers), as the user specified
+      // If a cell is not escaped, this function is called on it, and if it is escaped, this function is called after
+      // its' contents are unescaped
+      let trim_content_whitespace = fn(element: String) -> String {
         element
         |> case trim_start {
           True -> string.trim_start
@@ -490,31 +499,50 @@ pub fn run(
         }
       }
 
-      let unwrap = fn(element: String) -> Result(String, ParsingError) {
+      // Function for unwrapping a cell from escapers
+      let unwrap = fn(cell: String) -> Result(String, ParsingError) {
+        // First trim the whitespace from the cell, so if the CSV String was modified (such as aligning the columns)
+        // it will not affect this program from correctly unescaping cells.
+        let trimmed = string.trim(cell)
         case
-          string.starts_with(element, escaper),
-          string.ends_with(element, escaper)
+          string.starts_with(trimmed, escaper),
+          string.ends_with(trimmed, escaper)
         {
           True, True ->
+            // If it was wrapped in escapers, remove them along with the whitespace wrapping the cell
             Ok(
-              element
+              trimmed
               |> string.remove_prefix(escaper)
               |> string.remove_suffix(escaper),
             )
-          False, False -> Ok(element)
+          False, False ->
+            // If it wasn't wrapped in escapers, remove the original contents so the user can decide what
+            // to do with the whitespace
+            Ok(cell)
           _, _ ->
-            Error(EncounteredMalformedElement(element, "Mismatched escapers"))
+            // If the cell starts with an escaper but does not end in one, then something went wrong, and
+            // we are returning an error.
+            Error(EncounteredMalformedElement(cell, "Mismatched escapers"))
+        }
+      }
+
+      let finalize = case strict_columns {
+        True -> fn(output: #(a, List(String))) -> Result(a, ParsingError) {
+          let #(value, leftovers) = output
+          case leftovers {
+            // Strict columns and no leftovers, proceed
+            [] -> Ok(value)
+            // Strict columns and found leftovers, Error
+            _ -> Error(StrictParsedWithLeftovers(leftovers))
+          }
+        }
+        False -> fn(output: #(a, List(String))) -> Result(a, ParsingError) {
+          // Just ignore the leftovers
+          Ok(output.0)
         }
       }
 
       let unescape = unescape([#(escaper, escaper <> escaper)])
-
-      // If the headers are the same as expected, or the user didn't care and didn't specify them, they are in this value.
-      // But if they weren't as expected, this use statement means the rest of the function is not executed.
-      use _headers <- result.try(process_headers(
-        headers,
-        split_columns(found_headers),
-      ))
 
       // TODO : Is this order of operations the best choice? Maybe trim whitespace should be done inside the unwrap function,
       // just in case the source file was modified to be column aligned, but the user wants to preserve the
@@ -523,11 +551,8 @@ pub fn run(
       // and those that weren't, which should be avoided if possible.
 
       // A locally defined function capturing the parser data, that is used for processing each row
-      let process_row = fn(elements: List(String)) -> Result(a, ParsingError) {
-        elements
-        // Trim white space according to the rules set.
-        // It's before the unwrap steps in case the CSV file was modified, for example to align the columns
-        |> list.map(trim_whitespace)
+      let process_row = fn(cells: List(String)) -> Result(a, ParsingError) {
+        cells
         // Unwrap the String - ie, if the escape characters are present both at the beginning
         // and end of the String, remove them.
         // If only one end of the String has an escaper, throw a Parsing error for this row.
@@ -539,22 +564,17 @@ pub fn run(
           // (According to the CSV format standard, if any doubleQuotes appear inside a cell,
           // they must be replaced with two of them, and the entire cell wrapped)
           |> list.map(unescape)
-          // Call the Parsing function to convert the `List(String)` of elements (already unescaped and unwrapped)
-          // to try and convert it into the desired data type `a`.
+          // Trim white space according to the rules set.
+          // By this point, the string is unwrapped and unescaped, so what to do with it
+          // is up to the user.
+          |> list.map(trim_content_whitespace)
+          // Call the Parsing function to convert the `List(String)` of elements
+          // (already unescaped, unwrapped and trimmed) to try and convert it into
+          // the desired data type `a`.
           |> parse()
           // If the parsing step succeeded, check whether there were any leftovers,
           // and depending on the parser settings, either proceed or throw an error.
-          |> result.try(fn(output: #(a, List(String))) -> Result(
-            a,
-            ParsingError,
-          ) {
-            let #(value, leftovers) = output
-            case strict_columns, leftovers {
-              False, _ -> Ok(value)
-              True, [] -> Ok(value)
-              True, _ -> Error(StrictParsedWithLeftovers(leftovers))
-            }
-          })
+          |> result.try(finalize)
         })
       }
 
@@ -582,6 +602,8 @@ pub fn run(
 
 /// Internal helper function for creating a function for 'unescaping' an element
 /// (for each `rule`, replacing the second element in the tuple with the first).
+/// 
+/// Importantly, it does not `unwrap` the cell from escapers, just deduplicates them.
 /// 
 /// This function takes in a String that is guaranteed to be a value - that is,
 /// it'seither unescaped, or it starts with an escaper and ends with an escaper.
@@ -627,7 +649,7 @@ fn process_headers(
 /// Feel free to use it, but it is not part of the API, so a breaking change
 /// can occur in every version change, without prior notice.
 /// 
-pub fn partition_on_unescaped_(
+pub fn split_on_unescaped(
   separator el: String,
   not_in escaper: String,
 ) -> fn(String) -> List(String) {

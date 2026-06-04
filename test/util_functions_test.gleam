@@ -4,14 +4,14 @@ import mesv/util
 
 pub fn partition_on_unescaped_base_test() -> Nil {
   let in = "should,split,on,these,commas"
-  assert parse.partition_on_unescaped_(separator: ",", not_in: "\"")(in)
+  assert parse.split_on_unescaped(separator: ",", not_in: "\"")(in)
     == ["should", "split", "on", "these", "commas"]
     as "Partition on Unescaped | Base case equivalent to string.split"
 }
 
 pub fn partition_on_unescaped_one_escaped_test() -> Nil {
   let in = "should,split,on,these,commas,but,not,\"on this,one\",continued"
-  assert parse.partition_on_unescaped_(separator: ",", not_in: "\"")(in)
+  assert parse.split_on_unescaped(separator: ",", not_in: "\"")(in)
     == [
       "should",
       "split",
@@ -28,7 +28,7 @@ pub fn partition_on_unescaped_one_escaped_test() -> Nil {
 
 pub fn partition_on_unescaped_nested_escaper_test() -> Nil {
   let in = "now,for,rows\nthese,should,work\nand,\"this\none\",too"
-  assert parse.partition_on_unescaped_(separator: "\n", not_in: "\"")(in)
+  assert parse.split_on_unescaped(separator: "\n", not_in: "\"")(in)
     == ["now,for,rows", "these,should,work", "and,\"this\none\",too"]
     as "Partition on Unescaped | Escaper in the middle"
 }
@@ -36,7 +36,7 @@ pub fn partition_on_unescaped_nested_escaper_test() -> Nil {
 pub fn partition_on_unescaped_nested_multiple_escaper_test() -> Nil {
   let in =
     "now,for,rows\nthese,should,work\nand,\"this\none, with \"\"more escapers\"\"\",too"
-  assert parse.partition_on_unescaped_(separator: "\n", not_in: "\"")(in)
+  assert parse.split_on_unescaped(separator: "\n", not_in: "\"")(in)
     == [
       "now,for,rows",
       "these,should,work",
