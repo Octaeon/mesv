@@ -382,7 +382,65 @@ pub fn set_strict_columns(parser: Parser(a)) -> Parser(a) {
   Parser(..parser, strict_columns: True)
 }
 
-/// Function to use the specified `Parser(a)` to transform the source into a `List(a)`
+/// Function to use the specified `Parser(a)` to transform the source into a `List(a)`.
+/// 
+/// This function is deprecated, and should be replaced with the `run` function.
+/// 
+/// To follow the expected previous behaviour, it returns a `Result(#(List(a), List(ParsingError)),
+/// ParsingError)`, obtained by calling `result.partition` on the list of 
+/// `Result(a, ParsingError)` from parsing rows.
+/// 
+@deprecated("
+To simplify the API and comply with the Gleam convention, I have decided to rename the parse
+function to `run`. This function is still available to call, but should be replaced if possible.
+In new code, use the `run` function.
+")
+pub fn parse(
+  parser: Parser(a),
+  source: String,
+) -> Result(#(List(a), List(ParsingError)), ParsingError) {
+  run(parser, source)
+  |> result.map(fn(rows) {
+    rows
+    |> result.partition
+    |> pair.map_first(list.reverse)
+    |> pair.map_second(list.reverse)
+  })
+}
+
+/// Helper function to easily extract the successfully parsed rows from the output of
+/// the `parse.run` function.
+/// 
+/// ## Examples
+/// Without using this function:
+/// ```gleam
+/// parse.run(parser, "1,2\n1,\ntext,1.2")
+/// // -> [ Ok(#(1, 2))
+/// //    , Error(RanOutOfValues)
+/// //    , Error(CantParseRow)
+/// //    ]
+/// ```
+/// With the function:
+/// ```gleam
+/// parse.run(parser, "1,2\n1,\ntext,1.2")
+///   |> parse.get_parsed()
+///   // -> [ #(1, 2) ]
+/// ```
+/// 
+/// Of course, this is all under the assumption that the parsing succeeded initially
+/// and started execution.
+/// 
+pub fn get_parsed(rows: List(Result(a, ParsingError))) -> List(a) {
+  rows
+  |> list.filter_map(fn(val: Result(a, ParsingError)) -> Result(a, Nil) {
+    case val {
+      Ok(parsed_val) -> Ok(parsed_val)
+      Error(_) -> Error(Nil)
+    }
+  })
+}
+
+/// Function to use the specified `Parser(a)` to transform the `source` into a `List(a)`.
 /// 
 /// If the headers specified in the `expect_headers` function did not match the specified pattern,
 /// a `ParsingError` will be returned, of the type `ExpectedHeadersMismatch`, containing both
@@ -396,10 +454,10 @@ pub fn set_strict_columns(parser: Parser(a)) -> Parser(a) {
 /// What to do with both of these Lists is up to the user, whether to ignore all errors or abort
 /// if any errors occur.
 /// 
-pub fn parse(
+pub fn run(
   parser: Parser(a),
   source: String,
-) -> Result(#(List(a), List(ParsingError)), ParsingError) {
+) -> Result(List(Result(a, ParsingError)), ParsingError) {
   let Parser(
     column_separator,
     row_separator,
@@ -414,7 +472,7 @@ pub fn parse(
     partition_on_unescaped_(separator: row_separator, not_in: escaper)
 
   case split_rows(source) {
-    [] -> Ok(#([], []))
+    [] -> Ok([])
     [found_headers, ..contents] -> {
       // A local instance of the `partition_on_unescaped_` function, specifically for splitting columns
       let split_columns =
@@ -516,11 +574,7 @@ pub fn parse(
           row_string
           |> split_columns()
           |> process_row()
-        })
-        // Fucking hell, the partitiion function reverses the order of both lists. Without testing I would have missed this bug
-        |> result.partition()
-        |> pair.map_first(list.reverse)
-        |> pair.map_second(list.reverse),
+        }),
       )
     }
   }

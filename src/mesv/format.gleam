@@ -90,6 +90,31 @@ pub opaque type Formatter(a) {
 /// Function for directly building a `Formatter` that outputs the specified
 /// elements in an exact order.
 /// 
+/// ## Example
+/// The simplest formatter - converts a single `String` into a single element `List(String)`.
+/// ```gleam
+/// format.build(fn(val: String) -> List(String) { [val] })
+/// ```
+/// For more complicated data types, such as `Lists`, you need to create your own
+/// formatting and parsing schema.
+/// ```gleam
+/// format.build(fn(val: #(String, List(Int))) -> List(String) {
+///   let ints =
+///     val.1
+///     |> list.map(int.to_string)
+///     |> string.join(",")
+///   [
+///     val.0,
+///     "[" <> ints <> "]"
+///   ]
+/// })
+///   |> format.run([#("test", [1, 3, 2])])
+///   // -> "test,\"[1,3,2]\""
+/// ```
+/// Keep in mind that for such complex data types, it's up to you, as the user, to ensure
+/// that every possible input to your formatting function can be losslessly parsed with
+/// the corresponding parsing function.
+/// 
 pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
   Formatter(
     column_separator: ",",
@@ -201,10 +226,24 @@ fn wrap(in in: String) -> fn(String) -> String {
 /// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
 /// and encodes it into a String.
 /// 
+/// This function is deprecated; Use the `format.run` function instead.
+/// 
+@deprecated("
+To simplify the API and comply with the Gleam convention, I have decided to rename the format
+function to `run`. This function is still available to call, but should be replaced if possible.
+In new code, use the `run` function.
+")
+pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
+  run(formatter, elements)
+}
+
+/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
+/// and encodes it into a String.
+/// 
 /// All of the configuration options need to be set when building the `Formatter`,
 /// so this function is very simple to understand.
 /// 
-pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
+pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   let Formatter(
     column_separator,
     row_separator,

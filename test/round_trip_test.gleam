@@ -6,9 +6,10 @@
 //// `List(a) == mesv.parse(mesv.format(List(a)))`, no matter the specified separators and escapers.
 
 import gleam/int
+import gleam/list
 import mesv
 import mesv/format.{type Formatter}
-import mesv/parse.{type Parser}
+import mesv/parse.{type Parser, type ParsingError}
 import mesv_test.{type RowData, RowData}
 
 fn build_test_unit_parser_and_formatter(
@@ -45,22 +46,22 @@ fn build_test_unit(
   row_sep: String,
   escaper: String,
 ) -> fn(List(RowData)) ->
-  Result(#(List(RowData), List(parse.ParsingError)), parse.ParsingError) {
+  Result(List(Result(RowData, ParsingError)), ParsingError) {
   fn(rows: List(RowData)) -> Result(
-    #(List(RowData), List(parse.ParsingError)),
-    parse.ParsingError,
+    List(Result(RowData, ParsingError)),
+    ParsingError,
   ) {
     let #(formatter, parser) =
       build_test_unit_parser_and_formatter(col_sep, row_sep, escaper)
 
     rows
-    |> format.format(formatter, _)
-    |> parse.parse(parser, _)
+    |> format.run(formatter, _)
+    |> parse.run(parser, _)
   }
 }
 
-fn wrap(val: a) -> Result(#(a, _), _) {
-  Ok(#(val, []))
+fn wrap(val: List(a)) -> Result(List(Result(a, ParsingError)), ParsingError) {
+  Ok(val |> list.map(Ok))
 }
 
 pub fn default_normal_test() -> Nil {
