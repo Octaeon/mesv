@@ -95,7 +95,6 @@
 
 import gleam/function
 import gleam/list
-import gleam/option.{type Option, None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
@@ -137,6 +136,10 @@ pub opaque type Parser(a) {
   )
 }
 
+/// A data type specifying what headers the `Parser` is to expect.
+/// 
+/// Not certain it is the final version yet.
+/// 
 pub type ExpectedHeaders {
   Skip
   // Doesn't matter what the first row is, just skip it
@@ -152,7 +155,7 @@ pub type ExpectedHeaders {
   // Expect the first row of headers to all return `True` to at least one of the provided functions, in whatever order
 }
 
-/// This is a bad solution to what I'm doing. It will be changed
+/// This is a bad solution to what I'm doing. It will be changed (or made privete)
 pub type HeaderAction {
   ParseFirstRow
   SkipFirstRow
@@ -258,27 +261,40 @@ pub fn column(
 /// If the first row is not **strictly identical** to the contents of
 /// the arguments to this function, the parser will return an `Error`.
 /// 
-/// ## Examples
-/// ```gleam
-/// parser
-///   |> parse.parse("a,1,c")
-///   // -> row returns Ok(#("a", 1, "c"))
 /// 
-/// parser
-///   |> set_col_sep("|")
-///   |> parse.parse("a,1,c") // Will treat "a,1,c" as a single cell
-///   // -> row returns Error(RanOutOfValues)
-/// parser
-///   |> set_col_sep("|")
-///   |> parse.parse("a|1|c")
-///   // -> row returns Ok(#("a", 1, "c"))
-/// ```
-/// 
-pub fn expect_headers(
+pub fn set_expected_headers(
   parser: Parser(a),
   headers: ExpectedHeaders,
 ) -> Parser(a) {
   Parser(..parser, expect_headers: headers)
+}
+
+/// > **This function is deprecated, and should be replaced with the
+///   [[parse.html#set_expected_headers|`set_expected_headers`]] function.**
+/// 
+/// Configure the parser to treat the first parsed row as the headers,
+/// and specify that we expect the CSV headers to equal these headers.
+/// 
+/// If the first row is not **strictly identical** to the contents of
+/// the arguments to this function, the parser will return an `Error`.
+/// 
+/// ## Note
+/// To replace this function with the `set_expected_headers` while preserving
+/// behaviour, call it like so:
+/// ```gleam
+/// // change from
+/// |> parse.expect_headers(["some", "headers"])
+/// // to
+/// |> parse.set_expected_headers(InOrderExact(["some", "headers"]))
+/// ```
+/// For more information, see the documentation of the function in question.
+/// 
+@deprecated("
+A new function, `set_expected_headers` was created, with extended functionality and more documentation.
+For new code, use that one.
+")
+pub fn expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a) {
+  Parser(..parser, expect_headers: InOrderExact(headers))
 }
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
@@ -458,64 +474,163 @@ pub fn set_strict_columns(parser: Parser(a)) -> Parser(a) {
   Parser(..parser, strict_columns: True)
 }
 
-/// > **This function is deprecated, and should be replaced with the
-///   [[parse.html#run|`run`]] function.**
+/// Internal helper function to check whether the CSV headers that were found match
+/// the expected pattern that was specified in the Parser building process.
 /// 
-/// Function to use the specified `Parser(a)` to transform the source into a `#(List(a),
-/// List(ParsingError))`.
-/// 
-/// To follow the expected previous behaviour, it returns a `Result(#(List(a),
-/// List(ParsingError)), ParsingError)`, obtained by calling `result.partition` on
-/// the list of `Result(a, ParsingError)` from parsing rows.
-/// 
-@deprecated("
-To simplify the API and comply with the Gleam convention, I have decided to rename the parse
-function to `run`. This function is still available to call, but should be replaced if possible.
-In new code, use the `run` function.
-")
-pub fn parse(
-  parser: Parser(a),
-  source: String,
-) -> Result(#(List(a), List(ParsingError)), ParsingError) {
-  run(parser, source)
-  |> result.map(fn(rows) {
-    rows
-    |> result.partition
-    |> pair.map_first(list.reverse)
-    |> pair.map_second(list.reverse)
-  })
+fn process_headers(
+  expected: ExpectedHeaders,
+  found: List(String),
+) -> Result(HeaderAction, ParsingError) {
+  let match = fn(passed: Bool) -> Result(HeaderAction, ParsingError) {
+    case passed {
+      True -> Ok(SkipFirstRow)
+      False -> Error(ExpectedHeadersMismatch(expected, found))
+    }
+  }
+
+  case expected {
+    Skip -> Ok(SkipFirstRow)
+    Empty -> Ok(ParseFirstRow)
+    InOrderExact(ordered_exact) -> { ordered_exact == found } |> match()
+    UnorderedExact(unordered_exact) ->
+      found
+      |> list.all(list.contains(unordered_exact, _))
+      |> match()
+    InOrderCustom(ordered_custom) -> {
+      {
+        { list.length(ordered_custom) <= list.length(found) }
+        || list.map2(
+          ordered_custom,
+          found,
+          fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
+        )
+        |> list.all(function.identity)
+      }
+      |> match()
+    }
+    // UnorderedCustom(_) -> todo
+  }
 }
 
-/// Helper function to easily extract the successfully parsed rows from the output of
-/// the [[parse.html#run|`parse.run`]] function.
+/// Internal function for creating a row splitting function directly from a `Parser`.
 /// 
-/// ## Examples
-/// Without using this function:
-/// ```gleam
-/// parse.run(parser, "1,2\n1,\ntext,1.2")
-/// // -> [ Ok(#(1, 2))
-/// //    , Error(RanOutOfValues)
-/// //    , Error(CantParseRow)
-/// //    ]
-/// ```
-/// With the function:
-/// ```gleam
-/// parse.run(parser, "1,2\n1,\ntext,1.2")
-///   |> parse.get_parsed()
-///   // -> [ #(1, 2) ]
-/// ```
+fn make_row_splitter(parser: Parser(a)) -> fn(String) -> List(String) {
+  util.split_on_unescaped(
+    separator: parser.row_separator,
+    not_in: parser.escaper,
+  )
+}
+
+/// Internal function for creating a column splitting function directly from a `Parser`.
 /// 
-/// Of course, this is all under the assumption that the parsing succeeded initially
-/// and started execution.
+fn make_column_splitter(parser: Parser(a)) -> fn(String) -> List(String) {
+  util.split_on_unescaped(
+    separator: parser.column_separator,
+    not_in: parser.escaper,
+  )
+}
+
+/// Internal function for creating a trimming function directly from a `Parser`.
 /// 
-pub fn get_parsed(rows: List(Result(a, ParsingError))) -> List(a) {
-  rows
-  |> list.filter_map(fn(val: Result(a, ParsingError)) -> Result(a, Nil) {
-    case val {
-      Ok(parsed_val) -> Ok(parsed_val)
-      Error(_) -> Error(Nil)
+fn make_content_trimmer(parser: Parser(a)) -> fn(String) -> String {
+  let #(trim_start, trim_end) = parser.trim_whitespace
+  fn(element: String) -> String {
+    element
+    |> case trim_start {
+      True -> string.trim_start
+      False -> function.identity
     }
-  })
+    |> case trim_end {
+      True -> string.trim_end
+      False -> function.identity
+    }
+  }
+}
+
+/// Internal function for creating an unescaping function directly from a `Parser`.
+/// 
+fn make_unescaper(
+  parser: Parser(a),
+) -> fn(String) -> Result(String, ParsingError) {
+  let escaper = parser.escaper
+  // Unescape the String - for now, just deduplicate the escaper characters
+  // (According to the CSV format standard, if any doubleQuotes appear inside a cell,
+  // they must be replaced with two of them, and the entire cell wrapped)
+  let deduplicate = fn(cell: String) -> String {
+    cell
+    |> string.remove_prefix(escaper)
+    |> string.remove_suffix(escaper)
+    |> util.multi_replace([#(escaper <> escaper, escaper)])
+  }
+
+  let starts = fn(cell: String) -> Bool { string.starts_with(cell, escaper) }
+  let ends = fn(cell: String) -> Bool { string.ends_with(cell, escaper) }
+  let count = fn(cell: String) -> #(Int, Int) {
+    let unwrapped =
+      cell
+      |> string.remove_prefix(escaper)
+      |> string.remove_suffix(escaper)
+    #(
+      util.count_non_overlapping(escaper, unwrapped),
+      // Count single escapers
+      util.count_non_overlapping(escaper <> escaper, unwrapped),
+      // Count duplicated
+    )
+  }
+
+  // This might be overkill. Maybe instead of insisting on doing things with functional patterns
+  // I should bite the bullet and do things like this by just consuming the String one character
+  // at a time with a state machine implemented with recursive functions.
+  fn(cell: String) -> Result(String, ParsingError) {
+    // First trim the whitespace from the cell, so if the CSV String was modified (such as aligning the columns)
+    // it will not affect this program from correctly unescaping cells.
+    let trimmed = string.trim(cell)
+    // Count the number of escapers in the cell
+    let #(num_single, num_duplicated) = count(trimmed)
+
+    // Check if the number of escapers in the cell is even
+    case num_single, starts(trimmed), ends(trimmed) {
+      n, _, _ if n % 2 != 0 ->
+        Error(MalformedCell(cell, "Odd number of escapers"))
+      n, True, True if n % 2 == 0 && n == num_duplicated * 2 ->
+        // If it was even and wrapped in escapers, remove them along with the whitespace wrapping the cell
+        Ok(deduplicate(trimmed))
+      n, False, False if n == 0 && num_duplicated == 0 -> Ok(cell)
+      n, False, False if n != 0 ->
+        Error(MalformedCell(cell, "Unescaped internal escapers"))
+      n, _, _ if n != num_duplicated * 2 ->
+        // If the cell starts with an escaper but does not end in one, then something went wrong,
+        // and we are returning an error.
+        Error(MalformedCell(cell, "Wrongly duplicated internal escapers"))
+      _, _, _ ->
+        // If the cell starts with an escaper but does not end in one, then something went wrong,
+        // and we are returning an error.
+        Error(MalformedCell(cell, "Mismatched escapers"))
+    }
+  }
+}
+
+/// Internal function for creating a finalizer function that takes in the parsed
+/// value along with the leftover tokens, and returns a `Result(a, ParsingError)`.
+/// 
+fn make_finalizer(
+  parser: Parser(a),
+) -> fn(#(a, List(String))) -> Result(a, ParsingError) {
+  case parser.strict_columns {
+    True -> fn(output: #(a, List(String))) -> Result(a, ParsingError) {
+      let #(value, leftovers) = output
+      case leftovers {
+        // Strict columns and no leftovers, proceed
+        [] -> Ok(value)
+        // Strict columns and found leftovers, Error
+        _ -> Error(StrictParsedWithLeftovers(leftovers))
+      }
+    }
+    False -> fn(output: #(a, List(String))) -> Result(a, ParsingError) {
+      // Just ignore the leftovers
+      Ok(output.0)
+    }
+  }
 }
 
 /// Preprocess the `source` of the CSV file by reading all of the metadata contained in the
@@ -549,7 +664,7 @@ pub fn preprocess(
   source: String,
 ) -> Result(#(List(#(String, String)), Parser(a), String), String) {
   // To do this, I need to:
-  // 1. Extract both the `split_rows` and `split_columns` functions from the giant `run` function
+  // 1. Done
   // 2. Separate the header parsing logic into its' own function as well
   // 3. Traverse through the source argument passed in to this function row by row
   //    - If the first row is not the start of metadata, just process it as the headers and move on
@@ -608,103 +723,16 @@ pub fn run(
   parser: Parser(a),
   source: String,
 ) -> Result(List(Result(a, ParsingError)), ParsingError) {
-  let Parser(
-    column_separator,
-    row_separator,
-    escaper,
-    headers,
-    parse,
-    strict_columns,
-    #(trim_start, trim_end),
-  ) = parser
-
-  let split_rows = split_on_unescaped(separator: row_separator, not_in: escaper)
-
-  case split_rows(source) {
+  case make_row_splitter(parser)(source) {
+    // Empty file - just return an empty list.
     [] -> Ok([])
     [found_headers, ..contents] -> {
-      // A local instance of the `partition_on_unescaped_` function, specifically for splitting columns
-      let split_columns =
-        split_on_unescaped(separator: column_separator, not_in: escaper)
-
       // If the headers are the same as expected, or the user didn't care and didn't specify them, they are in this value.
       // But if they weren't as expected, this use statement means the rest of the function is not executed.
       use header_action <- result.try(process_headers(
-        headers,
-        split_columns(found_headers),
+        parser.expect_headers,
+        make_column_splitter(parser)(found_headers),
       ))
-
-      // Constructed function for trimming whitespace of cell contents (wrapped in escapers), as the user specified
-      // If a cell is not escaped, this function is called on it, and if it is escaped, this function is called after
-      // its' contents are unescaped
-      let trim_content_whitespace = fn(element: String) -> String {
-        element
-        |> case trim_start {
-          True -> string.trim_start
-          False -> function.identity
-        }
-        |> case trim_end {
-          True -> string.trim_end
-          False -> function.identity
-        }
-      }
-
-      // Function for unescaping a `CSV cell` into a `String` that can be parsed freely.
-      let unescape = fn(cell: String) -> Result(String, ParsingError) {
-        // First trim the whitespace from the cell, so if the CSV String was modified (such as aligning the columns)
-        // it will not affect this program from correctly unescaping cells.
-        let trimmed = string.trim(cell)
-
-        // Unescape the String - for now, just deduplicate the escaper characters
-        // (According to the CSV format standard, if any doubleQuotes appear inside a cell,
-        // they must be replaced with two of them, and the entire cell wrapped)
-        let deduplicate = deduplicate([#(escaper, escaper <> escaper)])
-
-        // TODO : Add checking if number of escapers is even to verifying if a cell is correctly formed
-        case
-          string.starts_with(trimmed, escaper),
-          string.ends_with(trimmed, escaper)
-        {
-          True, True ->
-            // If it was wrapped in escapers, remove them along with the whitespace wrapping the cell
-            Ok(
-              trimmed
-              |> string.remove_prefix(escaper)
-              |> string.remove_suffix(escaper)
-              |> deduplicate(),
-            )
-          False, False ->
-            // If it wasn't wrapped in escapers, remove the original contents so the user can decide what
-            // to do with the whitespace
-            Ok(cell |> deduplicate)
-          _, _ ->
-            // If the cell starts with an escaper but does not end in one, then something went wrong, and
-            // we are returning an error.
-            Error(MalformedCell(cell, "Mismatched escapers"))
-        }
-      }
-
-      let finalize = case strict_columns {
-        True -> fn(output: #(a, List(String))) -> Result(a, ParsingError) {
-          let #(value, leftovers) = output
-          case leftovers {
-            // Strict columns and no leftovers, proceed
-            [] -> Ok(value)
-            // Strict columns and found leftovers, Error
-            _ -> Error(StrictParsedWithLeftovers(leftovers))
-          }
-        }
-        False -> fn(output: #(a, List(String))) -> Result(a, ParsingError) {
-          // Just ignore the leftovers
-          Ok(output.0)
-        }
-      }
-
-      // TODO : Is this order of operations the best choice? Maybe trim whitespace should be done inside the unwrap function,
-      // just in case the source file was modified to be column aligned, but the user wants to preserve the
-      // whitespace.
-      // If that were the case, then the program would behave differently for cells which were escaped
-      // and those that weren't, which should be avoided if possible.
 
       // A locally defined function capturing the parser data, that is used for processing each row
       let process_row = fn(cells: List(String)) -> Result(a, ParsingError) {
@@ -712,7 +740,7 @@ pub fn run(
         // Unescape the String - ie, if the escape characters are present both at the beginning
         // and end of the String, remove them, and deduplicate any internal escapers.
         // If only one end of the String has an escaper, throw a Parsing error for this row.
-        |> list.map(unescape)
+        |> list.map(make_unescaper(parser))
         // Only proceed if all cells in this row are unwrapped
         |> result.all()
         |> result.try(fn(elements: List(String)) -> Result(a, ParsingError) {
@@ -720,14 +748,14 @@ pub fn run(
           // Trim white space according to the rules set.
           // By this point, the string is unwrapped and unescaped, so what to do with it
           // is up to the user.
-          |> list.map(trim_content_whitespace)
+          |> list.map(make_content_trimmer(parser))
           // Call the Parsing function to convert the `List(String)` of elements
           // (already unescaped, unwrapped and trimmed) to try and convert it into
           // the desired data type `a`.
-          |> parse()
+          |> parser.parse()
           // If the parsing step succeeded, check whether there were any leftovers,
           // and depending on the parser settings, either proceed or throw an error.
-          |> result.try(finalize)
+          |> result.try(make_finalizer(parser))
         })
       }
 
@@ -745,7 +773,7 @@ pub fn run(
         |> list.map(fn(row_string) {
           // All of the parsing functions are condensed here to avoid having to map multiple times.
           row_string
-          |> split_columns()
+          |> make_column_splitter(parser)
           |> process_row()
         }),
       )
@@ -753,93 +781,62 @@ pub fn run(
   }
 }
 
-/// Internal helper function for creating a function for 'unescaping' an element
-/// (for each `rule`, replacing the second element in the tuple with the first).
+/// > **This function is deprecated, and should be replaced with the
+///   [[parse.html#run|`run`]] function.**
 /// 
-/// Importantly, it does not `unwrap` the cell from escapers, just deduplicates them.
+/// Function to use the specified `Parser(a)` to transform the source into a `#(List(a),
+/// List(ParsingError))`.
 /// 
-/// This function takes in a String that is guaranteed to be a value - that is,
-/// it'seither unescaped, or it starts with an escaper and ends with an escaper.
+/// To follow the expected previous behaviour, it returns a `Result(#(List(a),
+/// List(ParsingError)), ParsingError)`, obtained by calling `result.partition` on
+/// the list of `Result(a, ParsingError)` from parsing rows.
 /// 
-/// It's a curried function because I like functional programming, and because it *should*
-/// give some performance improvements if I create such a function before any looping
-/// instead of constructing one for each iteration.
-/// 
-fn deduplicate(rules: List(#(String, String))) -> fn(String) -> String {
-  fn(el: String) -> String {
-    rules
-    |> list.map(fn(rule: #(String, String)) -> fn(String) -> String {
-      string.replace(each: rule.1, with: rule.0, in: _)
-    })
-    |> list.fold(el, fn(acc: String, rule: fn(String) -> String) -> String {
-      rule(acc)
-    })
-  }
+@deprecated("
+To simplify the API and comply with the Gleam convention, I have decided to rename the parse
+function to `run`. This function is still available to call, but should be replaced if possible.
+In new code, use the `run` function.
+")
+pub fn parse(
+  parser: Parser(a),
+  source: String,
+) -> Result(#(List(a), List(ParsingError)), ParsingError) {
+  run(parser, source)
+  |> result.map(fn(rows) {
+    rows
+    |> result.partition
+    |> pair.map_first(list.reverse)
+    |> pair.map_second(list.reverse)
+  })
 }
 
-/// Internal helper function to check whether the CSV headers that were found match
-/// the expected pattern that was specified in the Parser building process.
+/// Helper function to easily extract the successfully parsed rows from the output of
+/// the [[parse.html#run|`parse.run`]] function.
 /// 
-fn process_headers(
-  expected: ExpectedHeaders,
-  found: List(String),
-) -> Result(HeaderAction, ParsingError) {
-  let match = fn(passed: Bool) -> Result(HeaderAction, ParsingError) {
-    case passed {
-      True -> Ok(SkipFirstRow)
-      False -> Error(ExpectedHeadersMismatch(expected, found))
+/// ## Examples
+/// Without using this function:
+/// ```gleam
+/// parse.run(parser, "1,2\n1,\ntext,1.2")
+/// // -> [ Ok(#(1, 2))
+/// //    , Error(RanOutOfValues)
+/// //    , Error(CantParseRow)
+/// //    ]
+/// ```
+/// With the function:
+/// ```gleam
+/// parse.run(parser, "1,2\n1,\ntext,1.2")
+///   |> parse.get_parsed()
+///   // -> [ #(1, 2) ]
+/// ```
+/// 
+/// Of course, this is all under the assumption that the parsing succeeded initially
+/// and started execution.
+/// 
+pub fn get_parsed(rows: List(Result(a, ParsingError))) -> List(a) {
+  rows
+  |> list.filter_map(fn(val: Result(a, ParsingError)) -> Result(a, Nil) {
+    case val {
+      Ok(parsed_val) -> Ok(parsed_val)
+      Error(_) -> Error(Nil)
     }
-  }
-
-  case expected {
-    Skip -> Ok(SkipFirstRow)
-    Empty -> Ok(ParseFirstRow)
-    InOrderExact(ordered_exact) -> { ordered_exact == found } |> match()
-    UnorderedExact(unordered_exact) ->
-      found
-      |> list.all(list.contains(unordered_exact, _))
-      |> match()
-    InOrderCustom(ordered_custom) -> {
-      {
-        { list.length(ordered_custom) <= list.length(found) }
-        || list.map2(
-          ordered_custom,
-          found,
-          fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
-        )
-        |> list.all(function.identity)
-      }
-      |> match()
-    }
-    // UnorderedCustom(_) -> todo
-  }
-}
-
-/// > **Caution!** This is not a part of the provided API, so a breaking change can
-///   occur in every version change, without prior notice. Use with care.
-/// 
-/// Internal helper function for constructing a function that splits a `String`
-/// on `separator`, as long as the `separator` is not between two `not_in`.
-/// 
-/// It is public because I created unit tests for it.
-/// 
-pub fn split_on_unescaped(
-  separator el: String,
-  not_in escaper: String,
-) -> fn(String) -> List(String) {
-  // Change done :)
-  fn(to_split: String) -> List(String) {
-    to_split
-    // First split the string on the separator
-    |> string.split(on: el)
-    // Then traverse the List and merge any two Strings that don't form a cell together
-    |> util.list_merge_map(fn(first: String, second: String) -> Option(String) {
-      // If the first string contains an odd number of escaper Strings, merge the two
-      case util.count_occurences(of: escaper, in: first) % 2 == 1 {
-        // I almost forgot to readd the separator when merging the strings.
-        True -> Some(first <> el <> second)
-        False -> None
-      }
-    })
-  }
+  })
 }

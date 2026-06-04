@@ -1,7 +1,7 @@
 import gleam/int
 import gleam/list
 import mesv
-import mesv/parse.{type Parser}
+import mesv/parse.{type Parser, MalformedCell}
 import mesv_test.{type RowData, RowData}
 
 fn expected_normal_data() -> List(Result(RowData, b)) {
@@ -78,11 +78,13 @@ pub fn bad_escapers_test() -> Nil {
   // This should throw errors. I need to restructure the error handling of parsing.
   assert parsed
     == Ok([
-      Ok(RowData("Adam", 23, "Likes to \"mess\" with parsers")),
-      Ok(RowData(
-        "Bob",
-        45,
-        "Doesn't understand that \"\"internal escapers\"\" should be duplicated, not triplicated",
+      Error(MalformedCell(
+        "Likes to \"mess\" with parsers",
+        "Unescaped internal escapers",
+      )),
+      Error(MalformedCell(
+        "\"Doesn't understand that \"\"\"internal escapers\"\"\" should be duplicated, not triplicated\"",
+        "Wrongly duplicated internal escapers",
       )),
     ])
     as "Parsing default parameters | Odd number of escapers"
