@@ -14,6 +14,12 @@ repo = "mesv"
 # I'm pretty sure the link to the Hex page, Hexdocs page and repository will be automatically generated once I publish?
 # links = [{ title = "Website", href = "" }]
 
+# Documentation
+[[documentation.pages]]
+title = "ABNF Grammar"
+path = "mesv/mesv-grammar.html"
+source = "./documentation/mesv-grammar.md"
+
 # Code declarations
 target = "erlang"
 internal_modules = ["mesv/util"]

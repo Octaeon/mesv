@@ -108,7 +108,7 @@ import mesv/util
 /// 
 pub type ParsingError {
   CantParseRow(index: Int, contents: String, reason: String)
-  ExpectedHeadersMismatch(expected: List(String), found: List(String))
+  ExpectedHeadersMismatch(expected: ExpectedHeaders, found: List(String))
   RanOutOfValues
   StrictParsedWithLeftovers(leftovers: List(String))
   MalformedCell(element: String, description: String)
@@ -130,11 +130,32 @@ pub opaque type Parser(a) {
     column_separator: String,
     row_separator: String,
     escaper: String,
-    expect_headers: Option(List(String)),
+    expect_headers: ExpectedHeaders,
     parse: fn(List(String)) -> Result(#(a, List(String)), ParsingError),
     strict_columns: Bool,
     trim_whitespace: #(Bool, Bool),
   )
+}
+
+pub type ExpectedHeaders {
+  Skip
+  // Doesn't matter what the first row is, just skip it
+  Empty
+  // Expect the file to start with the data 
+  InOrderExact(List(String))
+  // Expect the first row of headers to be **exactly** in this order, with **exactly** these elements
+  UnorderedExact(List(String))
+  // Expect the first row of headers to have **exactly** these elements, but in whatever order
+  InOrderCustom(List(fn(String) -> Bool))
+  // Expect the first row of headers to return `True` when tested with the provided functions, in **exact** order.
+  // UnorderedCustom(List(fn(String) -> Bool))
+  // Expect the first row of headers to all return `True` to at least one of the provided functions, in whatever order
+}
+
+/// This is a bad solution to what I'm doing. It will be changed
+pub type HeaderAction {
+  ParseFirstRow
+  SkipFirstRow
 }
 
 /// Function for directly building a `Parser` that uses the subsequent elements in order.
@@ -177,7 +198,7 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
     column_separator: ",",
     row_separator: "\n",
     escaper: "\"",
-    expect_headers: None,
+    expect_headers: Empty,
     parse: fn(tokens: List(String)) -> Result(
       #(fn(a) -> b, List(String)),
       ParsingError,
@@ -253,8 +274,11 @@ pub fn column(
 ///   // -> row returns Ok(#("a", 1, "c"))
 /// ```
 /// 
-pub fn expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a) {
-  Parser(..parser, expect_headers: Some(headers))
+pub fn expect_headers(
+  parser: Parser(a),
+  headers: ExpectedHeaders,
+) -> Parser(a) {
+  Parser(..parser, expect_headers: headers)
 }
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
@@ -494,6 +518,51 @@ pub fn get_parsed(rows: List(Result(a, ParsingError))) -> List(a) {
   })
 }
 
+/// Preprocess the `source` of the CSV file by reading all of the metadata contained in the
+/// frontmatter block (started and ended by a row containing only three `-` characters, like
+/// so: `---` ) as well as the headers as specified in the `expect_headers` function.
+/// 
+/// ### Return explanation
+/// Returns a `Result`:
+/// - `Error(String)` if the headers didn't match
+/// - `Ok(#(List(#(String, String)), Parser(a), String))` if the headers did match.
+/// 
+/// In the case of an `Ok`, the values are like so:
+/// - The first `List(#(String, String))` is the list of metadata at the beginning. Right now,
+///   if the user wants to do something with it, they must do so manually.
+/// - Second element `Parser(a)` - a modified parser to use when calling the
+///   [[parse.html#run|`parse.run`]] function later - it will expect that the first row
+///   is the first data point, and will behave accordingly.
+/// - The third element `String` is the contents of the CSV file with the metadata and header
+///   row removed, which is what should go into the [[parse.html#run|`parse.run`]] function later.
+///   If you for some reason want to use `mesv` only for processing metadata, you could discard
+///   everything else and parse this `String` with another library.
+/// 
+/// As of right now, the frontmatter metadata can only be parsed if it follows the grammar
+/// `key sep value newline`, where `sep` is by default `:` and `newline` is the same as the
+/// CSV newline.
+/// 
+/// Read more about this on the [[mesv-grammar.html|MESV grammar]] page.
+/// 
+pub fn preprocess(
+  parser: Parser(a),
+  source: String,
+) -> Result(#(List(#(String, String)), Parser(a), String), String) {
+  // To do this, I need to:
+  // 1. Extract both the `split_rows` and `split_columns` functions from the giant `run` function
+  // 2. Separate the header parsing logic into its' own function as well
+  // 3. Traverse through the source argument passed in to this function row by row
+  //    - If the first row is not the start of metadata, just process it as the headers and move on
+  //    - If the first row is made up of three hyphens, traverse the source row by row, parsing
+  //      the contents as metadata, until the row marking the end (again three hyphens).
+  //      Then modify the parser to expect the string to start with data, return the rest of the
+  //      string, and the List of tuples made up of `key-value` pairs as the metadata.
+  // Based on the Parser settings, errors when parsing metadata can be either ignored or cause
+  // an early return with an `Error`.
+  // Implement this
+  todo
+}
+
 /// Function to use the specified `Parser(a)` to transform the `source` into a
 /// `Result(List(Result(a, ParsingError)))`.
 /// 
@@ -560,7 +629,7 @@ pub fn run(
 
       // If the headers are the same as expected, or the user didn't care and didn't specify them, they are in this value.
       // But if they weren't as expected, this use statement means the rest of the function is not executed.
-      use _headers <- result.try(process_headers(
+      use header_action <- result.try(process_headers(
         headers,
         split_columns(found_headers),
       ))
@@ -667,11 +736,11 @@ pub fn run(
       // So just map over the `List(String)` of rows and try to parse each of them,
       // and then partition the `List(Result(a, ParsingError))` into `#(List(a), List(ParsingError))`
       Ok(
-        // A hacky solution to append the first line to the contents if the user didn't provide
-        // an expected header pattern.
-        case headers {
-          Some(_) -> contents
-          None -> [found_headers, ..contents]
+        // A hacky solution to append the first line to the contents if the `process_headers`
+        // function returned decided that we should parse the first row.
+        case header_action {
+          ParseFirstRow -> [found_headers, ..contents]
+          SkipFirstRow -> contents
         }
         |> list.map(fn(row_string) {
           // All of the parsing functions are condensed here to avoid having to map multiple times.
@@ -712,16 +781,37 @@ fn deduplicate(rules: List(#(String, String))) -> fn(String) -> String {
 /// the expected pattern that was specified in the Parser building process.
 /// 
 fn process_headers(
-  expected: Option(List(String)),
+  expected: ExpectedHeaders,
   found: List(String),
-) -> Result(List(String), ParsingError) {
+) -> Result(HeaderAction, ParsingError) {
+  let match = fn(passed: Bool) -> Result(HeaderAction, ParsingError) {
+    case passed {
+      True -> Ok(SkipFirstRow)
+      False -> Error(ExpectedHeadersMismatch(expected, found))
+    }
+  }
+
   case expected {
-    Some(pattern) ->
-      case found == pattern {
-        True -> Ok(found)
-        False -> Error(ExpectedHeadersMismatch(pattern, found))
+    Skip -> Ok(SkipFirstRow)
+    Empty -> Ok(ParseFirstRow)
+    InOrderExact(ordered_exact) -> { ordered_exact == found } |> match()
+    UnorderedExact(unordered_exact) ->
+      found
+      |> list.all(list.contains(unordered_exact, _))
+      |> match()
+    InOrderCustom(ordered_custom) -> {
+      {
+        { list.length(ordered_custom) <= list.length(found) }
+        || list.map2(
+          ordered_custom,
+          found,
+          fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
+        )
+        |> list.all(function.identity)
       }
-    None -> Ok(found)
+      |> match()
+    }
+    // UnorderedCustom(_) -> todo
   }
 }
 
