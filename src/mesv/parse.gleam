@@ -1,9 +1,8 @@
-//// Module containing the functions for creating a `Parser`, and using the `Parser`
-//// to parse an input CSV String into a `List` of some data types.
+//// Module containing the functions for creating a [[parse.html#Parser|`Parser`]], and
+//// using it to parse an input CSV String into a `List` of some data types.
 //// 
-//// ### Important!
-//// At this stage, everything is still in flux, and breaking changes can occur
-//// on minor version updates. Be careful and check for possible issues before updating!
+//// > **Important!** At this stage, everything is still in flux, and breaking changes can
+////    occur on minor version updates. Be careful and check for possible issues before updating!
 //// 
 //// ## Examples
 //// A full example of parsing an example CSV String.
@@ -47,14 +46,14 @@
 ////     // the parsing will fail
 ////     |> parse.expect_headers(["Name", "Age", "Is an adult"])
 ////     // Pass in the CSV String to parse
-////     |> parse.parse(
+////     |> parse.run(
 ////       "Name,Age,Is an adult\n"
 ////       <> "Andrew,20,true\n"
 ////       <> "Blake,25,True\n"
 ////       <> "Cassandra,2,False",
 ////     )
 //// 
-////   assert parsed_data == Ok(#(expected_data, []))
+////   assert parsed_data == Ok(list.map(expected_data, Ok))
 //// }
 //// ```
 //// 
@@ -83,13 +82,13 @@
 ////     |> parse.column(Ok)
 ////     |> parse.column(int.parse)
 ////     // Pass in the CSV String to parse
-////     |> parse.parse(
+////     |> parse.run(
 ////       "Anna,20\n"
 ////       <> "Bob,25\n"
 ////       <> "Cleopatra,2095",
 ////     )
 //// 
-////   assert parsed_data == Ok(#(expected_data, []))
+////   assert parsed_data == Ok(list.map(expected_data, Ok))
 //// }
 //// ```
 //// 
@@ -112,18 +111,19 @@ pub type ParsingError {
   ExpectedHeadersMismatch(expected: List(String), found: List(String))
   RanOutOfValues
   StrictParsedWithLeftovers(leftovers: List(String))
-  EncounteredMalformedElement(element: String, description: String)
+  MalformedCell(element: String, description: String)
 }
 
 /// The type describing how to create a value of type `a` from a String.
 /// 
-/// To create it, use the `build` function, the provided transformation functions
-/// (`set_row_sep`, `set_col_sep`, `set_escaper`, `expect_headers`) to configure the
-/// specific behaviour, and the `column` function to specify how each subsequent column
-/// should be parsed.
+/// To create it, use the [[parse.html#build|`parse.build`]] function, the provided transformation
+/// functions (`set_row_sep`, `set_col_sep`, `set_escaper`, `expect_headers`) to configure the
+/// specific behaviour, and the [[parse.html#column|`parse.column`]] function to specify how each
+/// subsequent column should be parsed.
 /// 
-/// Once you have the desired `Parser(a)`, use the `parse` function to convert a `String`
-/// into a `List(a)` (plus a list of `ParsingError`s).
+/// Once you have the desired `Parser(a)`, use the [[parse.html#run|`parse.run`]] function to
+/// convert a `String` into a `List(Result(a, ParsingError))`, and check out the
+/// `parse.get_parsed` function to easily extract the succesfully parsed rows. 
 /// 
 pub opaque type Parser(a) {
   Parser(
@@ -142,8 +142,8 @@ pub opaque type Parser(a) {
 /// The function passed in should be a curried one - ie, a function that returns a
 /// function, and so on, with every subsequent function taking in some type of argument.
 /// 
-/// To build the parser, transform it using the `parse.column` function to specify
-/// how to parse each subsequent value in a row.
+/// To build the parser, transform it using the [[parse.html#column|`parse.column`]]
+/// function to specify how to parse each subsequent value in a row.
 /// 
 /// ## Examples
 /// The simplest parser is one element:
@@ -245,7 +245,7 @@ pub fn column(
 /// 
 /// parser
 ///   |> set_col_sep("|")
-///   |> parse.parse("a,1,c")
+///   |> parse.parse("a,1,c") // Will treat "a,1,c" as a single cell
 ///   // -> row returns Error(RanOutOfValues)
 /// parser
 ///   |> set_col_sep("|")
@@ -317,19 +317,71 @@ pub fn set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a) {
 }
 
 /// Function to set whether the parser should trim the whitespace on both ends of each value.
+/// This operation is performed **before** the contents of the cell are parsed using the
+/// functions from [[parse.html#column|`parse.column`]].
 /// 
-/// This operation is performed before the cell is unwrapped (escapers removed), so if the CSV
-/// file was modified somehow
-/// (for example, using VSCode plugin [Rainbow CSV](https://marketplace.visualstudio.com/items?itemName=mechatroner.rainbow-csv) to align the columns),
-/// the cell can be correctly unescaped and parsed.
+/// This operation is performed after the cell is unwrapped (escapers removed), so if
+/// the CSV file was modified somehow (for example, using VSCode plugin [Rainbow
+/// CSV](https://marketplace.visualstudio.com/items?itemName=mechatroner.rainbow-csv)
+/// to align the columns), the cells that were escaped will have their whitespace match
+/// the contents from before the CSV file was modified, while the cells that were not
+/// escaped will be parsed after this function.
 /// 
-/// I think the behaviour of this function and internal order of operations will change
-/// in the future, so no examples yet.
+/// So, if you use this function to disable whitespace trimming, it will mostly affect
+/// unescaped cells.
+/// 
+/// ## Examples
+/// By default, the parser will trim both the start and end of each cell:
+/// ```gleam
+/// parser
+///   |> parse.run("a   , 1,\"c\n  \"")
+///   // -> Ok(#("a", 1, "c"))
+/// ```
+/// If you disable trimming whitespace, parsing cells with whitespace that are not inside
+/// the escapers will still work, but the whitespace not inside the escapers will be
+/// trimmed regardless:
+/// ```gleam
+/// parser
+///   |> parse.set_trim_whitespace(False, False)
+///   |> parse.run("a   ,1,\"c\n  \"")
+///   // -> Ok(#("a   ", 1, "c\n  "))
+///   // [...]
+///   |> parse.run("a   ,    \"1\"   ,\"c\n  \"     ")
+///   // -> Ok(#("a   ", 1, "c\n  "))
+///   // For the last element, the whitespace around the escapers was trimmed
+/// ```
+/// Additionally, this function takes in two labelled arguments, making it possible to
+/// only trim one end of a cell.
+/// ```gleam
+/// parser
+///   |> parse.set_trim_whitespace(start: True, end: False)
+///   |> parse.run("Author's name,    Book title aligned somehow    ,   1999")
+///   // -> Ok(#("Author's name", "Book title aligned somehow    ", 1999))
+/// ```
+/// 
+/// Lastly, if you want to preserve whitespace for most of the cells (such as for
+/// `String`s), but some require being trimmed, simply modify the parsing function
+/// you pass to the [[parse.html#column|`parse.column`]] function.
+/// ```gleam
+/// // [...]
+///   |> parse.column(Ok) // Accept the string as is
+///   |> parse.column(Ok) // Same as above
+///   |> parse.column(fn(num: String) {
+///     num |> string.trim |> int.parse 
+///   })
+///   |> parse.set_trim_whitespace(False, False)
+///   |> parse.run(
+///     "Author's name,    Book title aligned somehow    , \"  1999\n  \""
+///   )
+///   // -> Ok(#(
+///   //    "Author's name", "Book title aligned somehow    ", 1999
+///   //    ))
+/// ```
 /// 
 pub fn set_trim_whitespace(
   parser: Parser(a),
-  trim_start: Bool,
-  trim_end: Bool,
+  start trim_start: Bool,
+  end trim_end: Bool,
 ) -> Parser(a) {
   Parser(..parser, trim_whitespace: #(trim_start, trim_end))
 }
@@ -411,7 +463,7 @@ pub fn parse(
 }
 
 /// Helper function to easily extract the successfully parsed rows from the output of
-/// the `parse.run` function.
+/// the [[parse.html#run|`parse.run`]] function.
 /// 
 /// ## Examples
 /// Without using this function:
@@ -442,19 +494,46 @@ pub fn get_parsed(rows: List(Result(a, ParsingError))) -> List(a) {
   })
 }
 
-/// Function to use the specified `Parser(a)` to transform the `source` into a `List(a)`.
+/// Function to use the specified `Parser(a)` to transform the `source` into a
+/// `Result(List(Result(a, ParsingError)))`.
 /// 
-/// If the headers specified in the `expect_headers` function did not match the specified pattern,
-/// a `ParsingError` will be returned, of the type `ExpectedHeadersMismatch`, containing both
-/// the expected headers, and what was found.
+/// If the headers specified in the [[parse.html#expect_headers|`expect_headers`]] function did
+/// not match the first row contents, a `ParsingError` will be returned, of the type
+/// `ExpectedHeadersMismatch`, containing both the expected headers and what was found.
 /// 
-/// If the headers weren't specified, or were specified and match the expected pattern, the
-/// function will return `Ok(#(List(parsed_type), List(ParsingError)))`;
-/// The first is the list of all rows that were successfully parsed, while the second is a list
-/// of `ParsingError`s that were thrown due to a row failing to parse.
+/// If the headers weren't specified, or were specified and match the expected pattern,
+/// the function will return `Ok(List(Result(a, ParsingError)))`.
 /// 
-/// What to do with both of these Lists is up to the user, whether to ignore all errors or abort
-/// if any errors occur.
+/// If you need a simple way to get the `List(a)` out of that, use the
+/// [[parse.html#get_parsed|`get_parsed`]] function.
+/// 
+/// The first is the list of all rows that were successfully parsed, while the second is a
+/// list of `ParsingError`s that were thrown due to a row failing to parse.
+/// 
+/// > What to do with both of these Lists is up to the user, whether to ignore all errors or abort
+///   if any errors occur.
+/// 
+/// ## Order of operations
+/// The order of operations when parsing is as such:
+/// 1. The rows of the source `String` are split using the
+///    [[parse.html#split_on_unescaped|`split_on_unescaped`]] helper function.
+/// 2. If the `List(String)` of the rows is not empty, first check if the headers match what
+///    the user specified.
+/// 3. If they do, process each row in turn:
+///    - Split row `String` into a `List(String)` of raw cells
+///    - Unwrap each cell by first trimming whitespace surrounding it. If the trimmed `String`
+///      both starts and ends with the escaper, remove them and return what was wrapped in them;
+///      if not, return the original raw cell. If the trimmed string only has the escaper on
+///      *one* end, return an `Error(MalformedCell)`.
+///    - If all of the cells returned an `Ok`, proceed
+///    - Unescape each cell's contents by deduplicating the escaper characters
+///    - Trim the whitespace of each cell according to what the user specified using the
+///      [[parse.html#set_trim_whitespace|`set_trim_whitespace`]] function
+///    - Parse the row by passing in the contents of the cells to the parsing functions from
+///      [[parse.html#column|`parse.column`]], then if they return `Ok`, passing in the output
+///      to the curried constructor function passed into the [[parse.html#build|`parse.build`]]
+///      function
+/// 4. Return a `List(Result(a, ParsingError))` and wrap it in `Ok`
 /// 
 pub fn run(
   parser: Parser(a),
@@ -501,11 +580,18 @@ pub fn run(
         }
       }
 
-      // Function for unwrapping a cell from escapers
-      let unwrap = fn(cell: String) -> Result(String, ParsingError) {
+      // Function for unescaping a `CSV cell` into a `String` that can be parsed freely.
+      let unescape = fn(cell: String) -> Result(String, ParsingError) {
         // First trim the whitespace from the cell, so if the CSV String was modified (such as aligning the columns)
         // it will not affect this program from correctly unescaping cells.
         let trimmed = string.trim(cell)
+
+        // Unescape the String - for now, just deduplicate the escaper characters
+        // (According to the CSV format standard, if any doubleQuotes appear inside a cell,
+        // they must be replaced with two of them, and the entire cell wrapped)
+        let deduplicate = deduplicate([#(escaper, escaper <> escaper)])
+
+        // TODO : Add checking if number of escapers is even to verifying if a cell is correctly formed
         case
           string.starts_with(trimmed, escaper),
           string.ends_with(trimmed, escaper)
@@ -515,16 +601,17 @@ pub fn run(
             Ok(
               trimmed
               |> string.remove_prefix(escaper)
-              |> string.remove_suffix(escaper),
+              |> string.remove_suffix(escaper)
+              |> deduplicate(),
             )
           False, False ->
             // If it wasn't wrapped in escapers, remove the original contents so the user can decide what
             // to do with the whitespace
-            Ok(cell)
+            Ok(cell |> deduplicate)
           _, _ ->
             // If the cell starts with an escaper but does not end in one, then something went wrong, and
             // we are returning an error.
-            Error(EncounteredMalformedElement(cell, "Mismatched escapers"))
+            Error(MalformedCell(cell, "Mismatched escapers"))
         }
       }
 
@@ -544,8 +631,6 @@ pub fn run(
         }
       }
 
-      let unescape = unescape([#(escaper, escaper <> escaper)])
-
       // TODO : Is this order of operations the best choice? Maybe trim whitespace should be done inside the unwrap function,
       // just in case the source file was modified to be column aligned, but the user wants to preserve the
       // whitespace.
@@ -555,17 +640,14 @@ pub fn run(
       // A locally defined function capturing the parser data, that is used for processing each row
       let process_row = fn(cells: List(String)) -> Result(a, ParsingError) {
         cells
-        // Unwrap the String - ie, if the escape characters are present both at the beginning
-        // and end of the String, remove them.
+        // Unescape the String - ie, if the escape characters are present both at the beginning
+        // and end of the String, remove them, and deduplicate any internal escapers.
         // If only one end of the String has an escaper, throw a Parsing error for this row.
-        |> list.map(unwrap)
+        |> list.map(unescape)
+        // Only proceed if all cells in this row are unwrapped
         |> result.all()
         |> result.try(fn(elements: List(String)) -> Result(a, ParsingError) {
           elements
-          // Unescape the String - for now, just deduplicate the escaper characters
-          // (According to the CSV format standard, if any doubleQuotes appear inside a cell,
-          // they must be replaced with two of them, and the entire cell wrapped)
-          |> list.map(unescape)
           // Trim white space according to the rules set.
           // By this point, the string is unwrapped and unescaped, so what to do with it
           // is up to the user.
@@ -614,7 +696,7 @@ pub fn run(
 /// give some performance improvements if I create such a function before any looping
 /// instead of constructing one for each iteration.
 /// 
-fn unescape(rules: List(#(String, String))) -> fn(String) -> String {
+fn deduplicate(rules: List(#(String, String))) -> fn(String) -> String {
   fn(el: String) -> String {
     rules
     |> list.map(fn(rule: #(String, String)) -> fn(String) -> String {
@@ -643,13 +725,13 @@ fn process_headers(
   }
 }
 
+/// > **Caution!** This is not a part of the provided API, so a breaking change can
+///   occur in every version change, without prior notice. Use with care.
+/// 
 /// Internal helper function for constructing a function that splits a `String`
 /// on `separator`, as long as the `separator` is not between two `not_in`.
 /// 
 /// It is public because I created unit tests for it.
-/// 
-/// Feel free to use it, but it is not part of the API, so a breaking change
-/// can occur in every version change, without prior notice.
 /// 
 pub fn split_on_unescaped(
   separator el: String,

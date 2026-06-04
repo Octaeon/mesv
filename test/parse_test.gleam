@@ -64,6 +64,30 @@ pub fn whitespace_test() -> Nil {
     as "Parsing default parameters | Trimming whitespace"
 }
 
+pub fn bad_escapers_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    build_test_unit_parser(col_sep, row_sep, esc)
+    |> parse.run(
+      "Adam,23,Likes to \"mess\" with parsers\n"
+      <> "Bob,45,\"Doesn't understand that \"\"\"internal escapers\"\"\" should be duplicated, not triplicated\"",
+    )
+
+  // This should throw errors. I need to restructure the error handling of parsing.
+  assert parsed
+    == Ok([
+      Ok(RowData("Adam", 23, "Likes to \"mess\" with parsers")),
+      Ok(RowData(
+        "Bob",
+        45,
+        "Doesn't understand that \"\"internal escapers\"\" should be duplicated, not triplicated",
+      )),
+    ])
+    as "Parsing default parameters | Odd number of escapers"
+}
+
 pub fn escaped_whitespace_test() -> Nil {
   let col_sep = ","
   let parsed =
