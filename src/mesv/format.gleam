@@ -223,10 +223,11 @@ fn wrap(in in: String) -> fn(String) -> String {
   fn(el: String) -> String { in <> el <> in }
 }
 
+/// > **This function is deprecated, and should be replaced with the
+///   [[format.html#run|`run`]] function.**
+/// 
 /// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
 /// and encodes it into a String.
-/// 
-/// This function is deprecated; Use the `format.run` function instead.
 /// 
 @deprecated("
 To simplify the API and comply with the Gleam convention, I have decided to rename the format

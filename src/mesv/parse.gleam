@@ -382,13 +382,15 @@ pub fn set_strict_columns(parser: Parser(a)) -> Parser(a) {
   Parser(..parser, strict_columns: True)
 }
 
-/// Function to use the specified `Parser(a)` to transform the source into a `List(a)`.
+/// > **This function is deprecated, and should be replaced with the
+///   [[parse.html#run|`run`]] function.**
 /// 
-/// This function is deprecated, and should be replaced with the `run` function.
+/// Function to use the specified `Parser(a)` to transform the source into a `#(List(a),
+/// List(ParsingError))`.
 /// 
-/// To follow the expected previous behaviour, it returns a `Result(#(List(a), List(ParsingError)),
-/// ParsingError)`, obtained by calling `result.partition` on the list of 
-/// `Result(a, ParsingError)` from parsing rows.
+/// To follow the expected previous behaviour, it returns a `Result(#(List(a),
+/// List(ParsingError)), ParsingError)`, obtained by calling `result.partition` on
+/// the list of `Result(a, ParsingError)` from parsing rows.
 /// 
 @deprecated("
 To simplify the API and comply with the Gleam convention, I have decided to rename the parse
