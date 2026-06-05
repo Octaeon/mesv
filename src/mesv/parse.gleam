@@ -549,7 +549,7 @@ fn process_headers(
     InOrderExact(ordered_exact) ->
       {
         { list.length(ordered_exact) <= list.length(found) }
-        || list.map2(
+        && list.map2(
           ordered_exact,
           found,
           fn(expected_col: String, found_col: String) -> Bool {
@@ -566,7 +566,7 @@ fn process_headers(
     InOrderMustPass(ordered_custom) -> {
       {
         { list.length(ordered_custom) <= list.length(found) }
-        || list.map2(
+        && list.map2(
           ordered_custom,
           found,
           fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
