@@ -70,7 +70,7 @@ pub fn count_overlapping(of find: String, in in: String) -> Int {
 /// 
 /// If there are none, this function returns the length of the second argument.
 /// 
-pub fn count_non_overlapping(of find: String, in in: String) -> Int {
+pub fn count_non_overlapping(in in: String, of find: String) -> Int {
   case string.is_empty(find) {
     // If the string to search for is empty, assume the user is trying to find the length of the string they're searching
     True -> string.length(in)
@@ -147,7 +147,7 @@ pub fn split_on_unescaped(
     // Then traverse the List and merge any two Strings that don't form a cell together
     |> list_merge_map(fn(first: String, second: String) -> Option(String) {
       // If the first string contains an odd number of escaper Strings, merge the two
-      case count_overlapping(of: escaper, in: first) % 2 == 1 {
+      case count_non_overlapping(of: escaper, in: first) % 2 == 1 {
         // I almost forgot to readd the separator when merging the strings.
         True -> Some(first <> el <> second)
         False -> None

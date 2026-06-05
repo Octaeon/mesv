@@ -94,10 +94,13 @@
 //// 
 
 import gleam/function
+import gleam/int
+import gleam/io
 import gleam/list
 import gleam/pair
 import gleam/result
 import gleam/string
+import mesv/stream.{type Stream, Done, Next}
 import mesv/util
 
 /// An error type representing any kind of error encountered when parsing.
@@ -139,6 +142,7 @@ pub opaque type Parser(a) {
 
 pub type CsvSource {
   Text(String)
+  RowStream(Stream(String))
 }
 
 /// A data type specifying what headers the `Parser` is to expect.
@@ -216,6 +220,42 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
     strict_columns: False,
     trim_whitespace: #(True, True),
   )
+}
+
+fn describe_error(err: ParsingError) -> String {
+  case err {
+    CantParseRow(index, contents, reason) ->
+      "Can't parse row #"
+      <> int.to_string(index)
+      <> " due to [ "
+      <> reason
+      <> " ]\n"
+      <> "contents: [ "
+      <> contents
+      <> " ]"
+    ExpectedHeadersMismatch(expected, found) ->
+      "Expected "
+      <> describe_expected_headers(expected)
+      <> ", found [ "
+      <> string.join(found, ", ")
+      <> " ]"
+    RanOutOfValues -> "Ran out of values"
+    StrictParsedWithLeftovers(leftovers) ->
+      "Encountered leftovers: [ " <> string.join(leftovers, ", ") <> " ]"
+    MalformedCell(element, description) ->
+      "Malformed cell: [ " <> element <> " ], because " <> description
+  }
+}
+
+fn describe_expected_headers(headers: ExpectedHeaders) -> String {
+  case headers {
+    Skip -> "Skip"
+    Empty -> "no headers"
+    InOrderExact(l) -> "Exactly [ " <> string.join(l, ", ") <> " ]"
+    HeadersMustContain(l) -> "Containing [ " <> string.join(l, ", ") <> " ]"
+    InOrderMustPass(_) -> "Ordered functions"
+    HeadersMustContainPassing(_) -> "Unordered functions"
+  }
 }
 
 /// Transform a `Parser`, by passing in a parsing function for a specified column.
@@ -586,6 +626,51 @@ fn process_headers(
   }
 }
 
+fn take_until_unescaped(
+  separator el: String,
+  not_in escaper: String,
+) -> fn(String) -> Result(#(String, String), String) {
+  fn(source: String) -> Result(#(String, String), String) {
+    take_until_unescaped_loop(source, el, escaper, "")
+    |> result.map(pair.swap)
+    |> result.map_error(fn(_) { source })
+  }
+}
+
+fn take_until_unescaped_loop(
+  from: String,
+  separator: String,
+  esc: String,
+  acc: String,
+) -> Result(#(String, String), Nil) {
+  case string.split_once(from, separator) {
+    Ok(#(head, rest)) -> {
+      let value = acc <> head
+      case util.count_non_overlapping(in: value, of: esc) % 2 == 0 {
+        True -> Ok(#(value, rest))
+        False ->
+          take_until_unescaped_loop(
+            rest,
+            separator,
+            esc,
+            // Almost made the same mistake again, lmao
+            acc <> separator <> head,
+          )
+      }
+    }
+    Error(Nil) -> Error(Nil)
+  }
+}
+
+fn make_row_stream(parser: Parser(a)) -> fn(String) -> Stream(String) {
+  fn(source: String) -> Stream(String) {
+    stream.from_divider(
+      source,
+      take_until_unescaped(parser.row_separator, parser.escaper),
+    )
+  }
+}
+
 /// Internal function for creating a row splitting function directly from a `Parser`.
 /// 
 fn make_row_splitter(parser: Parser(a)) -> fn(CsvSource) -> List(String) {
@@ -594,9 +679,10 @@ fn make_row_splitter(parser: Parser(a)) -> fn(CsvSource) -> List(String) {
       Text(str) ->
         str
         |> util.split_on_unescaped(
-    separator: parser.row_separator,
-    not_in: parser.escaper,
-  )
+          separator: parser.row_separator,
+          not_in: parser.escaper,
+        )
+      RowStream(stream) -> stream |> stream.to_list()
     }
   }
 }
@@ -651,9 +737,9 @@ fn make_unescaper(
       |> string.remove_prefix(escaper)
       |> string.remove_suffix(escaper)
     #(
-      util.count_non_overlapping(escaper, unwrapped),
+      util.count_non_overlapping(in: unwrapped, of: escaper),
       // Count single escapers
-      util.count_non_overlapping(escaper <> escaper, unwrapped),
+      util.count_non_overlapping(in: unwrapped, of: escaper <> escaper),
       // Count duplicated
     )
   }
@@ -739,23 +825,64 @@ fn make_finalizer(
 /// 
 /// Read more about this on the [MESV grammar](mesv-grammar.html) page.
 /// 
-fn preprocess(
+pub fn preprocess(
   parser: Parser(a),
-  source: String,
-) -> Result(#(List(#(String, String)), Parser(a), String), String) {
-  // To do this, I need to:
-  // 1. Done
-  // 2. Separate the header parsing logic into its' own function as well
-  // 3. Traverse through the source argument passed in to this function row by row
-  //    - If the first row is not the start of metadata, just process it as the headers and move on
-  //    - If the first row is made up of three hyphens, traverse the source row by row, parsing
-  //      the contents as metadata, until the row marking the end (again three hyphens).
-  //      Then modify the parser to expect the string to start with data, return the rest of the
-  //      string, and the List of tuples made up of `key-value` pairs as the metadata.
-  // Based on the Parser settings, errors when parsing metadata can be either ignored or cause
-  // an early return with an `Error`.
-  // Implement this
-  todo
+  source: CsvSource,
+) -> Result(#(List(#(String, String)), Parser(a), CsvSource), Nil) {
+  let #(row_stream, metadata) =
+    case source {
+      Text(str) -> make_row_stream(parser)(str)
+      RowStream(stream) -> stream
+    }
+    |> read_metadata(make_metadata_parser(parser))
+
+  case stream.next(row_stream) {
+    Next(stream, value) -> {
+      use row_stream <- result.try(
+        case
+          process_headers(
+            parser.expect_headers,
+            make_column_splitter(parser)(value),
+          )
+        {
+          Ok(SkipFirstRow) -> Ok(stream)
+          Ok(ParseFirstRow) -> Ok(stream.prepend(stream, value))
+          Error(err) -> {
+            io.println_error(describe_error(err))
+            Error(Nil)
+          }
+        },
+      )
+      let parser = parser |> set_expected_headers(Empty)
+      let data = row_stream |> RowStream
+      Ok(#(metadata, parser, data))
+    }
+    Done -> Error(Nil)
+  }
+}
+
+fn read_metadata(
+  rows: Stream(String),
+  parse_metadata_row: fn(String) -> Result(#(String, String), Nil),
+) -> #(Stream(String), List(#(String, String))) {
+  case stream.next(rows) {
+    Next(stream, "---") -> {
+      stream
+      |> stream.collect_until(fn(row: String) -> Bool { row == "---" })
+      |> pair.map_second(list.filter_map(_, parse_metadata_row))
+      |> pair.map_first(stream.drop(_, 1))
+    }
+    Next(stream, row) -> #(stream.prepend(stream, row), [])
+    Done -> #(stream.empty(), [])
+  }
+}
+
+fn make_metadata_parser(
+  parser: Parser(a),
+) -> fn(String) -> Result(#(String, String), Nil) {
+  fn(row: String) -> Result(#(String, String), Nil) {
+    take_until_unescaped_loop(row, ":", parser.escaper, "")
+  }
 }
 
 /// Function to use the specified `Parser(a)` to transform the `source` into a
