@@ -1,4 +1,4 @@
-//// Module containing the functions for creating a [[parse.html#Parser|`Parser`]], and
+//// Module containing the functions for creating a [`Parser`](parse.html#Parser), and
 //// using it to parse an input CSV String into a `List` of some data types.
 //// 
 //// > **Important!** At this stage, everything is still in flux, and breaking changes can
@@ -115,14 +115,15 @@ pub type ParsingError {
 
 /// The type describing how to create a value of type `a` from a String.
 /// 
-/// To create it, use the [[parse.html#build|`parse.build`]] function, the provided transformation
-/// functions (`set_row_sep`, `set_col_sep`, `set_escaper`, `expect_headers`) to configure the
-/// specific behaviour, and the [[parse.html#column|`parse.column`]] function to specify how each
-/// subsequent column should be parsed.
+/// To create it, use the [`parse.build`](parse.html#build) function, the provided transformation
+/// functions (`set_row_sep`, `set_col_sep`, `set_escaper`, `set_expected_headers`) to configure
+/// the specific behaviour, and the [`parse.column`](parse.html#column) function to specify how
+/// each subsequent column should be parsed.
 /// 
-/// Once you have the desired `Parser(a)`, use the [[parse.html#run|`parse.run`]] function to
+/// Once you have the desired `Parser(a)`, use the [`parse.run`](parse.html#run) function to
 /// convert a `String` into a `List(Result(a, ParsingError))`, and check out the
-/// `parse.get_parsed` function to easily extract the succesfully parsed rows. 
+/// [`parse.get_parsed`](parse.html#get_parsed) function to easily extract the succesfully parsed
+/// rows. 
 /// 
 pub opaque type Parser(a) {
   Parser(
@@ -147,12 +148,12 @@ pub type ExpectedHeaders {
   // Expect the file to start with the data 
   InOrderExact(List(String))
   // Expect the first row of headers to be **exactly** in this order, with **exactly** these elements
-  UnorderedExact(List(String))
-  // Expect the first row of headers to have **exactly** these elements, but in whatever order
-  InOrderCustom(List(fn(String) -> Bool))
+  HeadersMustContain(List(String))
+  // Expect the first row of headers to have all of these elements, but in whatever order
+  InOrderMustPass(List(fn(String) -> Bool))
   // Expect the first row of headers to return `True` when tested with the provided functions, in **exact** order.
-  // UnorderedCustom(List(fn(String) -> Bool))
-  // Expect the first row of headers to all return `True` to at least one of the provided functions, in whatever order
+  HeadersMustContainPassing(List(fn(String) -> Bool))
+  // Expect each of the functions above to return `True` to at least one of the found headers.
 }
 
 /// This is a bad solution to what I'm doing. It will be changed (or made privete)
@@ -166,7 +167,7 @@ pub type HeaderAction {
 /// The function passed in should be a curried one - ie, a function that returns a
 /// function, and so on, with every subsequent function taking in some type of argument.
 /// 
-/// To build the parser, transform it using the [[parse.html#column|`parse.column`]]
+/// To build the parser, transform it using the [`parse.column`](parse.html#column)
 /// function to specify how to parse each subsequent value in a row.
 /// 
 /// ## Examples
@@ -194,7 +195,7 @@ pub type HeaderAction {
 /// })
 /// ```
 /// and to parse the arguments to construct the result, again, use the
-/// `parse.column` function.
+/// [`parse.column`](parse.html#column) function.
 /// 
 pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
   Parser(
@@ -255,11 +256,7 @@ pub fn column(
   })
 }
 
-/// Configure the parser to treat the first parsed row as the headers,
-/// and specify that we expect the CSV headers to equal these headers.
-/// 
-/// If the first row is not **strictly identical** to the contents of
-/// the arguments to this function, the parser will return an `Error`.
+/// Documentation to be build :|
 /// 
 pub fn set_expected_headers(
   parser: Parser(a),
@@ -268,8 +265,67 @@ pub fn set_expected_headers(
   Parser(..parser, expect_headers: headers)
 }
 
+/// Helper function for converting exact `ExpectedHeaders` into broader comparisons, by first
+/// applying the `transform` function to both the found and expected values before checking
+/// if they are identical.
+/// 
+/// **Note**: Due to limitations in the underlying representation of the expected headers,
+/// only the `InOrderExact` and `HeadersMustContain` values will be transformed. If you wish
+/// to chain multiple transformations, call this function only once with a function that
+/// itself composes multiple transformations.
+/// 
+/// Of course, values like `Skip` and `Empty` will not be transformed.
+/// 
+/// Use this function if you expect headers in the first row and want more granular control
+/// over what the acceptable values are, but don't want to manually write a verification
+/// function for each header.
+/// 
+/// ## Examples
+/// ```gleam
+/// parser
+///   |> parse.set_expected_headers(InOrderExact(["Name", "Age"]))
+///   |> parse.run("name,age\n...")
+///   // -> Error(ExpectedHeadersMismatch)
+///   //    found ["name", "age"]
+/// ```
+/// By using this function, you can avoid such annoyances
+/// ```gleam
+/// parser
+///   |> parse.set_expected_headers(
+///     InOrderExact(["Name", "Age"])
+///       |> parse.transform_headers(string.lowercase)
+///   )
+///   |> parse.run("name,age\n...")
+///   // -> Ok(...)
+/// ```
+/// 
+pub fn transform_headers(
+  headers: ExpectedHeaders,
+  transform fun: fn(String) -> String,
+) -> ExpectedHeaders {
+  case headers {
+    Skip -> Skip
+    Empty -> Empty
+    InOrderExact(headers) ->
+      InOrderMustPass(
+        list.map(headers, fn(expected_col: String) -> fn(String) -> Bool {
+          fn(found_col: String) -> Bool { fun(expected_col) == fun(found_col) }
+        }),
+      )
+    HeadersMustContain(headers) ->
+      HeadersMustContainPassing(
+        list.map(headers, fn(expected_col: String) -> fn(String) -> Bool {
+          fn(found_col: String) -> Bool { fun(expected_col) == fun(found_col) }
+        }),
+      )
+    // I'm not happy that I can't transform the other two.
+    // Maybe this is not the best solution?
+    _ -> headers
+  }
+}
+
 /// > **This function is deprecated, and should be replaced with the
-///   [[parse.html#set_expected_headers|`set_expected_headers`]] function.**
+///   [`parse.set_expected_headers`](parse.html#set_expected_headers) function.**
 /// 
 /// Configure the parser to treat the first parsed row as the headers,
 /// and specify that we expect the CSV headers to equal these headers.
@@ -278,8 +334,8 @@ pub fn set_expected_headers(
 /// the arguments to this function, the parser will return an `Error`.
 /// 
 /// ## Note
-/// To replace this function with the `set_expected_headers` while preserving
-/// behaviour, call it like so:
+/// To replace this function with the [`set_expected_headers`](parse.html#set_expected_headers)
+/// while preserving behaviour, call it like so:
 /// ```gleam
 /// // change from
 /// |> parse.expect_headers(["some", "headers"])
@@ -289,7 +345,7 @@ pub fn set_expected_headers(
 /// For more information, see the documentation of the function in question.
 /// 
 @deprecated("
-A new function, `set_expected_headers` was created, with extended functionality and more documentation.
+A new function, set_expected_headers was created, with extended functionality and more documentation.
 For new code, use that one.
 ")
 pub fn expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a) {
@@ -357,7 +413,7 @@ pub fn set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a) {
 
 /// Function to set whether the parser should trim the whitespace on both ends of each value.
 /// This operation is performed **before** the contents of the cell are parsed using the
-/// functions from [[parse.html#column|`parse.column`]].
+/// functions from [`parse.column`](parse.html#column).
 /// 
 /// This operation is performed after the cell is unwrapped (escapers removed), so if
 /// the CSV file was modified somehow (for example, using VSCode plugin [Rainbow
@@ -400,7 +456,7 @@ pub fn set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a) {
 /// 
 /// Lastly, if you want to preserve whitespace for most of the cells (such as for
 /// `String`s), but some require being trimmed, simply modify the parsing function
-/// you pass to the [[parse.html#column|`parse.column`]] function.
+/// you pass to the [`parse.column`](parse.html#column) function.
 /// ```gleam
 /// // [...]
 ///   |> parse.column(Ok) // Accept the string as is
@@ -450,7 +506,7 @@ pub fn set_col_sep(
   Parser(..parser, column_separator: new_column_separator)
 }
 
-/// Function to make the parser strict in terms of columns.
+/// Function to make the parser expect strictly the required number of columns for each row.
 /// 
 /// This means that when parsing a row, there must be exactly as many cells as there were
 /// arguments for the internal `Parser` function. If this function is called, if there are
@@ -490,12 +546,24 @@ fn process_headers(
   case expected {
     Skip -> Ok(SkipFirstRow)
     Empty -> Ok(ParseFirstRow)
-    InOrderExact(ordered_exact) -> { ordered_exact == found } |> match()
-    UnorderedExact(unordered_exact) ->
-      found
-      |> list.all(list.contains(unordered_exact, _))
+    InOrderExact(ordered_exact) ->
+      {
+        { list.length(ordered_exact) <= list.length(found) }
+        || list.map2(
+          ordered_exact,
+          found,
+          fn(expected_col: String, found_col: String) -> Bool {
+            expected_col == found_col
+          },
+        )
+        |> list.all(function.identity)
+      }
       |> match()
-    InOrderCustom(ordered_custom) -> {
+    HeadersMustContain(unordered_exact) ->
+      unordered_exact
+      |> list.all(list.contains(found, _))
+      |> match()
+    InOrderMustPass(ordered_custom) -> {
       {
         { list.length(ordered_custom) <= list.length(found) }
         || list.map2(
@@ -507,7 +575,10 @@ fn process_headers(
       }
       |> match()
     }
-    // UnorderedCustom(_) -> todo
+    HeadersMustContainPassing(unordered_custom) ->
+      unordered_custom
+      |> list.all(list.any(found, _))
+      |> match()
   }
 }
 
@@ -645,10 +716,10 @@ fn make_finalizer(
 /// - The first `List(#(String, String))` is the list of metadata at the beginning. Right now,
 ///   if the user wants to do something with it, they must do so manually.
 /// - Second element `Parser(a)` - a modified parser to use when calling the
-///   [[parse.html#run|`parse.run`]] function later - it will expect that the first row
+///   [`parse.run`](parse.html#run) function later - it will expect that the first row
 ///   is the first data point, and will behave accordingly.
 /// - The third element `String` is the contents of the CSV file with the metadata and header
-///   row removed, which is what should go into the [[parse.html#run|`parse.run`]] function later.
+///   row removed, which is what should go into the [`parse.run`](parse.html#run) function later.
 ///   If you for some reason want to use `mesv` only for processing metadata, you could discard
 ///   everything else and parse this `String` with another library.
 /// 
@@ -656,7 +727,7 @@ fn make_finalizer(
 /// `key sep value newline`, where `sep` is by default `:` and `newline` is the same as the
 /// CSV newline.
 /// 
-/// Read more about this on the [[mesv-grammar.html|MESV grammar]] page.
+/// Read more about this on the [MESV grammar](mesv-grammar.html) page.
 /// 
 fn preprocess(
   parser: Parser(a),
@@ -680,15 +751,15 @@ fn preprocess(
 /// Function to use the specified `Parser(a)` to transform the `source` into a
 /// `Result(List(Result(a, ParsingError)))`.
 /// 
-/// If the headers specified in the [[parse.html#expect_headers|`expect_headers`]] function did
-/// not match the first row contents, a `ParsingError` will be returned, of the type
+/// If the headers specified in the [`parse.set_expected_headers`](parse.html#set_expected_headers)
+/// function did not match the first row contents, a `ParsingError` will be returned, of the type
 /// `ExpectedHeadersMismatch`, containing both the expected headers and what was found.
 /// 
 /// If the headers weren't specified, or were specified and match the expected pattern,
 /// the function will return `Ok(List(Result(a, ParsingError)))`.
 /// 
 /// If you need a simple way to get the `List(a)` out of that, use the
-/// [[parse.html#get_parsed|`get_parsed`]] function.
+/// [`parse.get_parsed`](parse.html#get_parsed) function.
 /// 
 /// The first is the list of all rows that were successfully parsed, while the second is a
 /// list of `ParsingError`s that were thrown due to a row failing to parse.
@@ -699,7 +770,7 @@ fn preprocess(
 /// ## Order of operations
 /// The order of operations when parsing is as such:
 /// 1. The rows of the source `String` are split using the
-///    [[parse.html#split_on_unescaped|`split_on_unescaped`]] helper function.
+///    [`util.split_on_unescaped`](util.html#split_on_unescaped) helper function.
 /// 2. If the `List(String)` of the rows is not empty, first check if the headers match what
 ///    the user specified.
 /// 3. If they do, process each row in turn:
@@ -711,10 +782,10 @@ fn preprocess(
 ///    - If all of the cells returned an `Ok`, proceed
 ///    - Unescape each cell's contents by deduplicating the escaper characters
 ///    - Trim the whitespace of each cell according to what the user specified using the
-///      [[parse.html#set_trim_whitespace|`set_trim_whitespace`]] function
+///      [`parse.set_trim_whitespace`](parse.html#set_trim_whitespace) function
 ///    - Parse the row by passing in the contents of the cells to the parsing functions from
-///      [[parse.html#column|`parse.column`]], then if they return `Ok`, passing in the output
-///      to the curried constructor function passed into the [[parse.html#build|`parse.build`]]
+///      [`parse.column`](parse.html#column), then if they return `Ok`, passing in the output
+///      to the curried constructor function passed into the [`parse.build`](parse.html#build)
 ///      function
 /// 4. Return a `List(Result(a, ParsingError))` and wrap it in `Ok`
 /// 
@@ -781,7 +852,7 @@ pub fn run(
 }
 
 /// > **This function is deprecated, and should be replaced with the
-///   [[parse.html#run|`run`]] function.**
+///   [`parse.run`](parse.html#run) function.**
 /// 
 /// Function to use the specified `Parser(a)` to transform the source into a `#(List(a),
 /// List(ParsingError))`.
@@ -809,7 +880,7 @@ pub fn parse(
 }
 
 /// Helper function to easily extract the successfully parsed rows from the output of
-/// the [[parse.html#run|`parse.run`]] function.
+/// the [`parse.run`](parse.html#run) function.
 /// 
 /// ## Examples
 /// Without using this function:

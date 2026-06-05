@@ -70,12 +70,9 @@ import mesv/util
 
 /// The type describing how to convert a specified data type `a` into String form.
 /// 
-/// To create it, use the `build` function and the provided transformation functions
-/// (`set_row_sep`, `set_col_sep`, `set_headers`, `set_escaper`) to configure
-/// the specific behaviour.
+/// To create it, use the [`format.build`](format.html#build) function and the provided transformation functions (`set_row_sep`, `set_col_sep`, `set_headers`, `set_escaper`) to configure the specific behaviour.
 /// 
-/// Once you have the required `Formatter(a)`, use the `format` function to
-/// convert a `List(a)` into a String.
+/// Once you have the required `Formatter(a)`, use the [`format.run`](format.html#run) function to convert a `List(a)` into a String.
 /// 
 pub opaque type Formatter(a) {
   Formatter(
@@ -206,7 +203,7 @@ fn wrap(in in: String) -> fn(String) -> String {
 }
 
 /// > **This function is deprecated, and should be replaced with the
-///   [[format.html#run|`run`]] function.**
+///   [`format.run`](format.html#run) function.**
 /// 
 /// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
 /// and encodes it into a String.

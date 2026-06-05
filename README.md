@@ -26,8 +26,8 @@ Basic examples of both formatting (converting data to String) and parsing (readi
 ## Formatting
 As formatting is the simpler use case of the two available, I will go over it first.
 
-To generate a default CSV file from some data, you first need to create a `Formatter`.
-To do so, simply call the `format.build` function and pass in a function that converts your data type to a `List(String)`.
+To generate a default CSV file from some data, you first need to create a [`Formatter`](mesv/format.html#Formatter).
+To do so, simply call the [`format.build`](mesv/format.html#build) function and pass in a function that converts your data type to a `List(String)`.
 
 ```gleam
 import gleam/int
@@ -55,14 +55,14 @@ pub fn main() -> Nil {
     })
 
   // Then, use that formatter on the data you want to format
-  let formatted_data = format.format(formatter, data)
+  let formatted_data = format.run(formatter, data)
 
   // By default, the formatter uses the comma as a column separator,
   // newline as the row separator, and doublequotes for escaping cells
   assert formatted_data == "Adam,20,true\nBeatrice,25,true\nColin,2,false"
 }
 ```
-Then just call the `format.format` function using your `Formatter` to convert a `List` of data into a String.
+Then just call the [`format.run`](mesv/format.html#run) with it, and convert a `List` of data into a String.
 
 ### Setting custom separators and escapers
 As mentioned in the comments of the above example, the `Formatter` is initialized with some default values.
@@ -72,7 +72,12 @@ Specifically:
 - `\n` is used as the row separator
 - `"` is used as the escaper, to wrap cells that contain separators or escapers inside
 
-However, all of these can be changed using the `set_` functions.
+However, all of these can be changed using the `set_` functions:
+- [`set_col_sep`](mesv/format.html#set_col_sep)
+- [`set_row_sep`](mesv/format.html#set_row_sep)
+- [`set_escaper`](mesv/format.html#set_escaper)
+
+Go to the [`mesv/format`](mesv/format.html) module documentation through the links to learn more.
 
 ```gleam
 // Setup code is hidden to reduce bloat
@@ -84,7 +89,7 @@ pub fn main() -> Nil {
     |> format.set_row_sep(";")
     |> format.set_escaper("'") // Effect not visible here
 
-  let formatted_data = format.format(formatter, data)
+  let formatted_data = format.run(formatter, data)
 
   // As you can see, the formatted CSV is different,
   // though the data is identical.
@@ -111,7 +116,7 @@ pub fn main() -> Nil {
     |> format.set_col_sep("|")
     |> format.set_row_sep(";")
     |> format.set_escaper("'")
-    |> format.format(data)
+    |> format.run(data)
 
   // Only cells that need to be escaped will be wrapped in escapers.
   assert formatted_data
@@ -119,15 +124,15 @@ pub fn main() -> Nil {
 }
 ```
 
-Using the function `format.set_escape_all`, it's possible to make a formatter that escapes all cells. However, I don't know where this would be useful - I added it because I was on a roll, without thinking too much.
+Using the function [`set_escape_all`](mesv/format.html#set_escape_all), it's possible to make a formatter that escapes all cells.
+However, I don't know where this would be useful - I added it because I was on a roll, without thinking too much.
 
 ### Headers
-By default, the output will not contain headers - however, you can set headers by using the `format.set_headers` function and passing in a `List(String)`, which will
+By default, the output will not contain headers - however, you can set headers by using the [`format.set_headers`](mesv/format.html#set_headers) function and passing in a `List(String)`, which will
 be prepended to the CSV String, joined with the column separators and appropriately escaped if necessary.
 
 ```gleam
 // [...]
-
 const data: List(#(String, Int, Bool)) = [
   #("Adam", 20, True),
   #("Beatrice", 25, True),
@@ -139,7 +144,7 @@ pub fn main() -> Nil {
     // [...]
     |> format.set_headers(["Name", "Age", "Is an adult"])
     // ^ Setting headers 
-    |> format.format(data)
+    |> format.run(data)
 
   // The specified headers are prepended to the CSV string
   assert formatted_data
@@ -188,7 +193,7 @@ pub fn main() -> Nil {
       }
     })
     // Pass in the CSV String to parse
-    |> parse.parse(
+    |> parse.run(
       "Adam,20,true\nBeatrice,25,true\nColin,2,false",
     )
 
@@ -197,24 +202,35 @@ pub fn main() -> Nil {
 }
 ```
 
-First, use the `parse.build` function to construct a `Parser`. This function expects a curried function - that is, a function that returns a function -
+First, use the [`parse.build`](mesv/parse.html#build) function to construct a [`Parser`](mesv/parse.html#Parser). This function expects a curried function - that is, a function that returns a function -
 with as many arguments as there are inputs to construct the final output.
 
-Then, call `parse.column` to specify a function to use when parsing that column, and transform the `Parser` into one where one argument is filled.
+Then, call [`parse.column`](mesv/parse.html#column) to specify a function to use when parsing that column, and transform the `Parser` into one where one argument is filled.
 
-It is possible to call `parse.parse` using a `Parser` without any columns specified - however, doing so would result in a List of curried functions without any data inside.
+It is possible to call [`parse.run`](mesv/parse.html#column) using a `Parser` without any columns specified - however, doing so would result in a List of curried functions without any data inside.
 
 In the above example, the succesive functions do this:
 1. First, `parse.build` creates a `Parser(fn(String) -> fn(Int) -> fn(Bool) -> #(String, Int, Bool))`.
 2. Then, `parse.column` specifies that to transform the first element of a row from `String` to `Result(String, Nil)`, use the function `Ok`.
 3. The next `parse.column` says that to turn the second element from `String` to `Result(Int, Nil)`, use the function `int.parse`.
 4. The last `parse.column` is a custom one for parsing `Bool` - Return `Ok(Bool)` for `true` or `false`, and `Error(Nil)` for anything else.
-5. Then, call the `parse.parse` function to use the above specified functions on each row, and if they succeed transform them into the specified data type, `#(String, Int, Bool)`.
+5. Then, call the `parse.run` function to use the above specified functions on each row, and if they succeed transform them into the specified data type, `#(String, Int, Bool)`.
 
 ### Headers
 As in the Formatting section, handling headers is one of the features of `mesv`.
 
-Specifically, if you know that the first row is going to be headers, you can specify what you expect they will be - then, if they don't match, the parser will return an `Error(ExpectedHeadersMismatch)`.
+To specify to the `Parser` how to deal with headers, use the [`parse.set_expected_headers`](mesv/parse.html#set_expected_headers) function and pass in an [`ExpectedHeaders`](mesv/parse.html#ExpectedHeaders) value.
+This data type describes what your expectations are for the headers in the provided CSV file.
+- `Skip` - don't care about the headers, and whatever is in the first row, skip it.
+- `Empty` - in the CSV file, there will be no headers - start parsing directly from the first row as data.
+- `InOrderExact(List(String))` - you expect headers in the first row, and the parsed list of columns must be **identical** to what you passed into this constructor. Basically, we check if `found_headers.starts_with(expected_headers)`, and if false, throw an error.
+- `HeadersMustContain(List(String))` - you expect headers in the first row, and all of the headers passed to this type must be found in the first row, in whatever order. If any one of them is not found, throw an error.
+- `InOrderMustPass(List(fn(String) -> Bool))` - you expect headers in the first row, and the parsed list of columns must all return `True` for their respective checks. Useful if you expect the first row to have some text, but don't care about capitalization, or you want to perform other checks on each header.
+- `HeadersMustContainPassing(List(fn(String) -> Bool))` - Analogue of the `HeadersMustContain` variation for the `InOrderMustPass`. Basically, all of the functions passed in must return `True` for any of the found headers.
+
+When not specified, the `Parser` uses the value `Empty` - so it expects the first row of the CSV file to be data.
+
+Lastly, if you specified any value expect for `Skip` or `Empty`, if the checks don't pass, the [`parse.run`](mesv/parse.html#run) function wll return  `Error(ExpectedHeadersMismatch)`.
 ```gleam
 // expected_data is identical
 pub fn main() -> Nil {
@@ -223,8 +239,10 @@ pub fn main() -> Nil {
     // Specify that the first row is the headers,
     // and if they don't match what is specified, 
     // the parsing will fail
-    |> parse.expect_headers(["Name", "Age", "Is an adult"])
-    |> parse.parse(
+    |> parse.set_expected_headers(
+      InOrderExact(["Name", "Age", "Is an adult"])
+    )
+    |> parse.run(
       "Name,Age,Is an adult\n"
       <> "Adam,20,true\n"
       <> "Beatrice,25,true\n"
@@ -236,7 +254,8 @@ pub fn main() -> Nil {
 ```
 
 To add to the above explanation, this would be inserting a step between 4 and 5:
-5. The `parse.expect_headers` says to the parser that the first row will be headers, and that they should be identical to what is passed in. If they aren't, the parsing returns an `Error`.
+5. The [`parse.set_expected_headers`](mesv/parse.html#set_expected_headers) says to the parser that the first row will be headers, and that they should start with the values passed in.
+If they don't, the parsing returns an `Error`.
 
 ### Setting custom separators and escapers
 Just as with a formatter, a parser can also be configured to expect custom colum and row separators, and escapers.
@@ -259,15 +278,15 @@ I'm sure there does exist a foolproof and reliable method of escaping cells with
 **Tldr;** use single character escapers.
 
 ### Notes
-The `parse.parse` function returns a rather strange type, that being `Result(#(List(a), List(parse.ParsingError)), parse.ParsingError)`.
+The [`parse.run`](mesv/parse.html#run) function returns a rather strange type, that being `Result(List(Result(a, parse.ParsingError)), parse.ParsingError)`.
 This structure is liable to change, as I'm not very happy with how I handled parsing errors.
 
-However, to explain it a bit - if the `Parser` had headers specified using `expect_headers` function and the first row didn't match the expected values, an `Error(ExpectedHeadersMismatch)` value is returned.
+However, to explain it a bit - if the `Parser` had headers specified using [`set_expected_headers`](mesv/parse.html#set_expected_headers) function and the first row didn't pass the checks, an `Error(ExpectedHeadersMismatch)` value is returned.
 If they did match or were not specified, the function will always return an `Ok` value.
 
-In that `Ok` value is a tuple of lists. The first list is the list of successfully parsed rows, and the second list is the errors returned for each row that failed to parse.
+In that `Ok` value is a list of `Result`s. Each of those rows can either succeed in parsing and return `a`, or fail, and return `parse.ParsingError` describing what happened.
 
-Specifically, these two lists are obtained through calling the `result.partition` function on a `List(Result(a, parse.ParsingError))`, then reversing the two lists (since partition returns them in reverse order).
+If you're interested only in the successfully parsed values, then use the [`parse.get_parsed`](mesv/parse.html#get_parsed) function to filter them out.
 
 ## Documentation
 Further documentation can be found at [hexdocs/mesv](https://hexdocs.pm/mesv), in the descriptions of the relevant modules.

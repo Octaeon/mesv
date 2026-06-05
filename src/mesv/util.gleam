@@ -12,7 +12,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
 
-/// Internal helper function that traverses a list, calling the `merge` function on
+/// Internal helper function that traverses a list, calling the provided `merge` function on
 /// all consecutive elements.
 /// 
 /// If the function returns `Some(a)`, then the two elements are replaced with the contents,
@@ -109,12 +109,7 @@ fn recursive_count(
 }
 
 /// Internal helper function for creating a function for 'unescaping' an element
-/// (for each `rule`, replacing the second element in the tuple with the first).
-/// 
-/// Importantly, it does not `unwrap` the cell from escapers, just deduplicates them.
-/// 
-/// This function takes in a String that is guaranteed to be a value - that is,
-/// it'seither unescaped, or it starts with an escaper and ends with an escaper.
+/// (for each `rule`, replacing the first element in the tuple with the second).
 /// 
 /// It's a curried function because I like functional programming, and because it *should*
 /// give some performance improvements if I create such a function before any looping
