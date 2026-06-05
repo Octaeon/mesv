@@ -1,4 +1,8 @@
+import gleam/int
+import gleam/list
 import gleeunit
+import mesv
+import mesv/parse.{type Parser}
 
 pub type RowData {
   RowData(name: String, age: Int, comment: String)
@@ -48,6 +52,45 @@ pub fn escaper_data(escaper: String) -> List(RowData) {
         <> escaper,
     ),
   ]
+}
+
+pub fn expected_normal_data() -> List(Result(RowData, b)) {
+  normal_data() |> list.map(Ok)
+}
+
+pub fn expected_column_separator_data(
+  col_sep: String,
+) -> List(Result(RowData, b)) {
+  column_separator_data(col_sep) |> list.map(Ok)
+}
+
+pub fn expected_row_separator_data(
+  row_sep: String,
+) -> List(Result(RowData, b)) {
+  row_separator_data(row_sep) |> list.map(Ok)
+}
+
+pub fn expected_escaper_data(esc: String) -> List(Result(RowData, b)) {
+  escaper_data(esc) |> list.map(Ok)
+}
+
+pub fn build_test_unit_parser(
+  col_sep: String,
+  row_sep: String,
+  escaper: String,
+) -> Parser(RowData) {
+  parse.build({
+    use name <- mesv.parsed
+    use age <- mesv.parsed
+    use comment <- mesv.parsed
+    RowData(name, age, comment)
+  })
+  |> parse.column(Ok)
+  |> parse.column(int.parse)
+  |> parse.column(Ok)
+  |> parse.set_col_sep(col_sep)
+  |> parse.set_row_sep(row_sep)
+  |> parse.set_escaper(escaper)
 }
 
 /// Main function that acts as the entrypoint for the testing library `gleeunit`.

@@ -261,7 +261,6 @@ pub fn column(
 /// If the first row is not **strictly identical** to the contents of
 /// the arguments to this function, the parser will return an `Error`.
 /// 
-/// 
 pub fn set_expected_headers(
   parser: Parser(a),
   headers: ExpectedHeaders,
@@ -659,7 +658,7 @@ fn make_finalizer(
 /// 
 /// Read more about this on the [[mesv-grammar.html|MESV grammar]] page.
 /// 
-pub fn preprocess(
+fn preprocess(
   parser: Parser(a),
   source: String,
 ) -> Result(#(List(#(String, String)), Parser(a), String), String) {
