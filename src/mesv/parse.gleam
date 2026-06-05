@@ -137,6 +137,10 @@ pub opaque type Parser(a) {
   )
 }
 
+pub type CsvSource {
+  Text(String)
+}
+
 /// A data type specifying what headers the `Parser` is to expect.
 /// 
 /// Not certain it is the final version yet.
@@ -584,11 +588,17 @@ fn process_headers(
 
 /// Internal function for creating a row splitting function directly from a `Parser`.
 /// 
-fn make_row_splitter(parser: Parser(a)) -> fn(String) -> List(String) {
-  util.split_on_unescaped(
+fn make_row_splitter(parser: Parser(a)) -> fn(CsvSource) -> List(String) {
+  fn(source: CsvSource) -> List(String) {
+    case source {
+      Text(str) ->
+        str
+        |> util.split_on_unescaped(
     separator: parser.row_separator,
     not_in: parser.escaper,
   )
+    }
+  }
 }
 
 /// Internal function for creating a column splitting function directly from a `Parser`.
@@ -791,7 +801,7 @@ fn preprocess(
 /// 
 pub fn run(
   parser: Parser(a),
-  source: String,
+  source: CsvSource,
 ) -> Result(List(Result(a, ParsingError)), ParsingError) {
   case make_row_splitter(parser)(source) {
     // Empty file - just return an empty list.
@@ -870,7 +880,7 @@ pub fn parse(
   parser: Parser(a),
   source: String,
 ) -> Result(#(List(a), List(ParsingError)), ParsingError) {
-  run(parser, source)
+  run(parser, Text(source))
   |> result.map(fn(rows) {
     rows
     |> result.partition

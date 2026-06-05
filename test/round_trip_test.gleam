@@ -9,7 +9,7 @@ import gleam/int
 import gleam/list
 import mesv
 import mesv/format.{type Formatter}
-import mesv/parse.{type Parser, type ParsingError}
+import mesv/parse.{type Parser, type ParsingError, Text}
 import mesv_test.{type RowData, RowData}
 
 fn build_test_unit_parser_and_formatter(
@@ -56,7 +56,7 @@ fn build_test_unit(
 
     rows
     |> format.run(formatter, _)
-    |> parse.run(parser, _)
+    |> fn(str: String) { parse.run(parser, Text(str)) }
   }
 }
 
