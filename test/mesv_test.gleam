@@ -2,6 +2,7 @@ import gleam/int
 import gleam/list
 import gleeunit
 import mesv
+import mesv/format.{type Formatter}
 import mesv/parse.{type Parser}
 
 pub type RowData {
@@ -91,6 +92,24 @@ pub fn build_test_unit_parser(
   |> parse.set_col_sep(col_sep)
   |> parse.set_row_sep(row_sep)
   |> parse.set_escaper(escaper)
+}
+
+pub fn format_row_data(row: RowData) -> List(String) {
+  let RowData(name, age, comment) = row
+  [name, int.to_string(age), comment]
+}
+
+pub fn build_test_unit_formatter(
+  to_str: fn(RowData) -> List(String),
+  col_sep: String,
+  row_sep: String,
+  escaper: String,
+) -> Formatter(RowData) {
+  to_str
+  |> format.build()
+  |> format.set_col_sep(col_sep)
+  |> format.set_row_sep(row_sep)
+  |> format.set_escaper(escaper)
 }
 
 /// Main function that acts as the entrypoint for the testing library `gleeunit`.

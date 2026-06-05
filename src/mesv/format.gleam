@@ -217,6 +217,37 @@ pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
   run(formatter, elements)
 }
 
+fn escapeify(formatter: Formatter(a)) -> fn(String) -> String {
+  let escaper = formatter.escaper
+  fn(el: String) -> String {
+    el
+    |> string.trim()
+    |> util.multi_replace([#(escaper, escaper <> escaper)])
+    |> wrap(in: escaper)
+  }
+}
+
+fn make_to_escape(formatter: Formatter(a)) -> fn(String) -> Bool {
+  needs_escaping([
+    formatter.column_separator,
+    formatter.row_separator,
+    formatter.escaper,
+    "\n",
+    "\r",
+    ":",
+    // Metadata key-value separator. Quick and dirty solution, will be changed.
+  ])
+}
+
+fn make_ensafeify(formatter: Formatter(a)) -> fn(String) -> String {
+  fn(val: String) -> String {
+    case formatter.escape_all || make_to_escape(formatter)(val) {
+      True -> escapeify(formatter)(val)
+      False -> val
+    }
+  }
+}
+
 /// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
 /// and encodes it into a String.
 /// 
@@ -227,35 +258,11 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   let Formatter(
     column_separator,
     row_separator,
-    escaper,
-    escape_all,
+    _escaper,
+    _escape_all,
     maybe_headers,
     to_string,
   ) = formatter
-
-  // For each separate element (column value in specific row) replace the first String with the second
-  let rules = [#(escaper, escaper <> escaper)]
-  let escapeify = fn(el: String) -> String {
-    el
-    |> string.trim()
-    |> util.multi_replace(rules)
-    |> wrap(in: escaper)
-  }
-  let to_escape =
-    needs_escaping([
-      column_separator,
-      row_separator,
-      escaper,
-      "\n",
-      "\r",
-    ])
-
-  let ensafeify = fn(val: String) -> String {
-    case escape_all || to_escape(val) {
-      True -> escapeify(val)
-      False -> val
-    }
-  }
 
   case maybe_headers {
     Some(headers) -> [headers, ..elements |> list.map(to_string)]
@@ -264,8 +271,56 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   |> list.map(fn(values: List(String)) -> String {
     values
     |> list.map(string.trim)
-    |> list.map(ensafeify)
+    |> list.map(make_ensafeify(formatter))
     |> string.join(column_separator)
   })
   |> string.join(row_separator)
+}
+
+pub fn preprocess(
+  formatter: Formatter(a),
+  metadata: List(#(String, String)),
+) -> #(Formatter(a), String) {
+  case metadata {
+    [] -> #(formatter, "")
+    non_empty -> {
+      let metadata =
+        non_empty
+        |> list.map(make_metadata_formatter(formatter))
+        |> string.join(formatter.row_separator)
+        |> wrap(in: "---" <> formatter.row_separator)
+      case formatter.headers {
+        Some(headers) -> {
+          let row =
+            headers
+            |> list.map(string.trim)
+            |> list.map(make_ensafeify(formatter))
+            |> string.join(formatter.column_separator)
+          #(
+            Formatter(..formatter, headers: None),
+            metadata <> row <> formatter.row_separator,
+          )
+        }
+        None -> #(formatter, metadata)
+      }
+    }
+  }
+}
+
+fn make_metadata_formatter(
+  formatter: Formatter(a),
+) -> fn(#(String, String)) -> String {
+  let ensafeify = make_ensafeify(formatter)
+  fn(metadata: #(String, String)) -> String {
+    ensafeify(metadata.0)
+    <> ":"
+    <> ensafeify(metadata.1)
+    <> formatter.row_separator
+  }
+}
+
+pub fn then(in: #(Formatter(a), String), format: List(a)) -> String {
+  let #(formatter, string) = in
+
+  string <> run(formatter, format)
 }
