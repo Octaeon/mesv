@@ -1,20 +1,12 @@
-import mesv/format.{type Formatter}
-import mesv_test.{type RowData}
-
-fn build_formatter(
-  col_sep: String,
-  row_sep: String,
-  esc: String,
-) -> Formatter(RowData) {
-  mesv_test.row_data_formatter(col_sep, row_sep, esc)
-}
+import mesv/format
+import mesv_test.{RowData}
 
 pub fn default_normal_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.normal_data())
 
   assert formatted
@@ -22,12 +14,50 @@ pub fn default_normal_test() -> Nil {
     as "Formatting default parameters | Normal"
 }
 
+pub fn default_whitespace_unescaped_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let formatted =
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
+    |> format.run([
+      RowData(
+        "Albert",
+        69,
+        "    needs to keep his distance from the borders of his cell   ",
+      ),
+    ])
+
+  assert formatted
+    == "Albert,69,    needs to keep his distance from the borders of his cell   "
+    as "Formatting default parameters | Expect preservation of whitespace in unescaped cells"
+}
+
+pub fn default_whitespace_escaped_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let formatted =
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
+    |> format.run([
+      RowData(
+        "Baldur",
+        67,
+        "Doesn't think his age is \"funny\", and likes aligned columns ",
+      ),
+    ])
+
+  assert formatted
+    == "Baldur,67,\"Doesn't think his age is \"\"funny\"\", and likes aligned columns \""
+    as "Formatting default parameters | Expect preservation of whitespace in escaped cells"
+}
+
 pub fn default_column_separator_test() -> Nil {
   let col_sep = ","
   let row_sep = "\n"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.column_separator_data(col_sep))
 
   assert formatted
@@ -40,7 +70,7 @@ pub fn default_row_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.row_separator_data(row_sep))
 
   assert formatted
@@ -53,7 +83,7 @@ pub fn default_escaper_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.escaper_data(esc))
 
   assert formatted
@@ -67,7 +97,7 @@ pub fn custom_col_normal_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.normal_data())
 
   assert formatted
@@ -80,7 +110,7 @@ pub fn custom_col_column_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.column_separator_data(col_sep))
 
   assert formatted
@@ -93,7 +123,7 @@ pub fn custom_col_row_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.row_separator_data(row_sep))
 
   assert formatted
@@ -106,7 +136,7 @@ pub fn custom_col_escaper_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.escaper_data(esc))
 
   assert formatted
@@ -120,7 +150,7 @@ pub fn custom_row_normal_test() -> Nil {
   let row_sep = "|"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.normal_data())
 
   assert formatted
@@ -133,7 +163,7 @@ pub fn custom_row_column_separator_test() -> Nil {
   let row_sep = "|"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.column_separator_data(col_sep))
 
   assert formatted
@@ -146,7 +176,7 @@ pub fn custom_row_row_separator_test() -> Nil {
   let row_sep = "|"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.row_separator_data(row_sep))
 
   assert formatted
@@ -159,7 +189,7 @@ pub fn custom_row_escaper_test() -> Nil {
   let row_sep = "|"
   let esc = "\""
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.escaper_data(esc))
 
   assert formatted
@@ -173,7 +203,7 @@ pub fn custom_esc_normal_test() -> Nil {
   let row_sep = "\n"
   let esc = "'"
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.normal_data())
 
   assert formatted
@@ -186,7 +216,7 @@ pub fn custom_esc_column_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "'"
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.column_separator_data(col_sep))
 
   assert formatted
@@ -199,7 +229,7 @@ pub fn custom_esc_row_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "'"
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.row_separator_data(row_sep))
 
   assert formatted
@@ -212,7 +242,7 @@ pub fn custom_esc_escaper_test() -> Nil {
   let row_sep = "\n"
   let esc = "'"
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.escaper_data(esc))
 
   assert formatted
@@ -226,7 +256,7 @@ pub fn combined_normal_test() -> Nil {
   let row_sep = ";"
   let esc = "'"
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.normal_data())
 
   assert formatted
@@ -239,7 +269,7 @@ pub fn combined_column_separator_test() -> Nil {
   let row_sep = ";"
   let esc = "'"
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.column_separator_data(col_sep))
 
   assert formatted
@@ -252,7 +282,7 @@ pub fn combined_row_separator_test() -> Nil {
   let row_sep = ";"
   let esc = "'"
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.row_separator_data(row_sep))
 
   assert formatted
@@ -265,7 +295,7 @@ pub fn combined_escaper_test() -> Nil {
   let row_sep = ";"
   let esc = "'"
   let formatted =
-    build_formatter(col_sep, row_sep, esc)
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.run(mesv_test.escaper_data(esc))
 
   assert formatted
