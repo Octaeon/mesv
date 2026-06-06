@@ -1,7 +1,7 @@
 import gleam/string
 import mesv/parse.{
   ExpectedHeadersMismatch, HeadersMustContain, HeadersMustContainPassing,
-  InOrderExact, InOrderMustPass, Skip, Text,
+  InOrderExact, InOrderMustPass, MalformedCell, Skip, Text,
 }
 import mesv_test
 
@@ -84,7 +84,11 @@ pub fn default_skip_malformed_test() -> Nil {
       <> "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data())
+  assert parsed
+    == Error(MalformedCell(
+      "and \"they're not\" even properly escaped!",
+      "Unescaped internal escapers",
+    ))
     as "Parsing default parameters | Headers, Skip malformed header row"
 }
 
@@ -250,4 +254,45 @@ pub fn default_unordered_match_fail_test() -> Nil {
   assert parsed != Ok(mesv_test.expected_normal_data()) as
     // Impossible to test for equality between objects containing functions
     "Parsing default parameters | Headers, HeadersMustContainPassing fail"
+}
+
+pub fn default_header_expectation_transform_lowercase_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(
+      InOrderExact(["Name", "Age", "Comment"])
+      |> parse.transform_headers(string.lowercase),
+    )
+    |> parse.run(Text(
+      "NAME,AGE,COMMENT\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed == Ok(mesv_test.expected_normal_data()) as
+    // Impossible to test for equality between objects containing functions
+    "Parsing default parameters | Headers, transform_headers InOrderExact make lowercase"
+}
+
+pub fn default_header_expectation_transform_trim_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(
+      HeadersMustContain(["Age", "Name", "Comment"])
+      |> parse.transform_headers(fn(s) {
+        s |> string.lowercase() |> string.trim()
+      }),
+    )
+    |> parse.set_trim_whitespace(True, True)
+    |> parse.run(Text(
+      "name    ,age    ,\"  comment  \"\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed == Ok(mesv_test.expected_normal_data()) as
+    // Impossible to test for equality between objects containing functions
+    "Parsing default parameters | Headers, transform_headers InOrderExact lowercase trim"
 }
