@@ -83,11 +83,11 @@ pub fn parse_row_data() -> fn(String) -> fn(Int) -> fn(String) -> RowData {
 }
 
 pub fn build_test_unit_parser(
-  parser: Parser(a),
+  parser: Parser(a, e),
   col_sep: String,
   row_sep: String,
   escaper: String,
-) -> Parser(a) {
+) -> Parser(a, e) {
   parser
   |> parse.set_col_sep(col_sep)
   |> parse.set_row_sep(row_sep)
@@ -125,7 +125,7 @@ pub fn row_data_parser(
   col_sep: String,
   row_sep: String,
   escaper: String,
-) -> Parser(RowData) {
+) -> Parser(RowData, Nil) {
   parse.build(parse_row_data())
   |> parse.column(Ok)
   |> parse.column(int.parse)

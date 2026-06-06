@@ -6,15 +6,18 @@
 //// `List(a) == mesv.parse(mesv.format(List(a)))`, no matter the specified separators and escapers.
 
 import gleam/list
+import gleam/result
 import mesv/format.{type Formatter}
-import mesv/parse.{type Parser, type ParsingError, Text}
+import mesv/parse.{
+  type DataRowError, type Parser, type PreprocessingError, InOrderExact, Text,
+}
 import mesv_test.{type RowData}
 
 fn build_test_unit_parser_and_formatter(
   col_sep: String,
   row_sep: String,
   escaper: String,
-) -> #(Formatter(RowData), Parser(RowData)) {
+) -> #(Formatter(RowData), Parser(RowData, Nil)) {
   #(
     mesv_test.row_data_formatter(col_sep, row_sep, escaper),
     mesv_test.row_data_parser(col_sep, row_sep, escaper),
@@ -26,21 +29,30 @@ fn build_test_unit(
   row_sep: String,
   escaper: String,
 ) -> fn(List(RowData)) ->
-  Result(List(Result(RowData, ParsingError)), ParsingError) {
-  fn(rows: List(RowData)) -> Result(
-    List(Result(RowData, ParsingError)),
-    ParsingError,
-  ) {
-    let #(formatter, parser) =
-      build_test_unit_parser_and_formatter(col_sep, row_sep, escaper)
+  Result(List(Result(RowData, DataRowError(Nil))), PreprocessingError) {
+  let #(formatter, parser) =
+    build_test_unit_parser_and_formatter(col_sep, row_sep, escaper)
 
-    rows
-    |> format.run(formatter, _)
-    |> fn(str: String) { parse.run(parser, Text(str)) }
+  let headers = ["Name", "Age", "Comment"]
+
+  fn(rows: List(RowData)) {
+    formatter
+    |> format.set_headers(headers)
+    |> format.preprocess([])
+    |> format.then(rows)
+    |> fn(str: String) {
+      parser
+      |> parse.set_expected_headers(InOrderExact(headers))
+      |> parse.preprocess(Text(str))
+      |> result.map(fn(preprocessing_output) {
+        let #(_metadata, parser, csv_source) = preprocessing_output
+        parse.run(parser, csv_source)
+      })
+    }
   }
 }
 
-fn wrap(val: List(a)) -> Result(List(Result(a, ParsingError)), ParsingError) {
+fn wrap(val: List(a)) -> Result(List(Result(a, e)), PreprocessingError) {
   Ok(val |> list.map(Ok))
 }
 

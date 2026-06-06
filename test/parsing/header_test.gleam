@@ -1,7 +1,7 @@
 import gleam/string
 import mesv/parse.{
-  ExpectedHeadersMismatch, HeadersMustContain, HeadersMustContainPassing, Ignore,
-  InOrderExact, InOrderMustPass, MalformedCell, Text,
+  HeadersMustContain, HeadersMustContainPassing, Ignore, InOrderExact,
+  InOrderMustPass, Text,
 }
 import mesv_test
 
@@ -16,7 +16,7 @@ pub fn old_header_behaviour_normal_test() -> Nil {
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data())
+  assert parsed == mesv_test.expected_normal_data()
     as "Parsing default parameters | Old header behaviour"
 }
 
@@ -31,14 +31,7 @@ pub fn old_header_behaviour_error_test() -> Nil {
       "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed
-    == Error(
-      ExpectedHeadersMismatch(InOrderExact(["Name", "Age", "Comment"]), [
-        "Name",
-        "Age",
-        "comment",
-      ]),
-    )
+  assert parsed == []
     as "Parsing default parameters | Old header behaviour, expected error"
 }
 
@@ -53,7 +46,7 @@ pub fn default_skip_normal_test() -> Nil {
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data())
+  assert parsed == mesv_test.expected_normal_data()
     as "Parsing default parameters | Headers, Skip correct CSV"
 }
 
@@ -68,7 +61,7 @@ pub fn default_skip_empty_row_test() -> Nil {
       "\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data())
+  assert parsed == mesv_test.expected_normal_data()
     as "Parsing default parameters | Headers, Skip empty header row"
 }
 
@@ -84,7 +77,7 @@ pub fn default_skip_malformed_test() -> Nil {
       <> "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data()) as
+  assert parsed == mesv_test.expected_normal_data() as
     // I'm not yet certain whether this is the kind of behaviour I want to happen, but if the user
     // states they want to "Skip" the first row, doesn't that imply they don't care about what's inside of it?
     // Maybe I should rename that option to "Ignore" - that would imply parsing the first row but ignoring its'
@@ -103,7 +96,7 @@ pub fn default_ordered_exact_pass_test() -> Nil {
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data())
+  assert parsed == mesv_test.expected_normal_data()
     as "Parsing default parameters | Headers, InOrderExact pass"
 }
 
@@ -118,15 +111,15 @@ pub fn default_ordered_exact_fail_test() -> Nil {
       "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed
-    == Error(
-      ExpectedHeadersMismatch(InOrderExact(["Name", "Age", "Comment"]), [
-        "Name",
-        "Age",
-        "comment",
-      ]),
-    )
-    as "Parsing default parameters | Headers, InOrderExact fail"
+  assert parsed == [] as
+    // Error(
+    //   ExpectedHeadersMismatch(InOrderExact(["Name", "Age", "Comment"]), [
+    //     "Name",
+    //     "Age",
+    //     "comment",
+    //   ]),
+    // )
+    "Parsing default parameters | Headers, InOrderExact fail"
 }
 
 pub fn default_unordered_exact_pass_test() -> Nil {
@@ -142,7 +135,7 @@ pub fn default_unordered_exact_pass_test() -> Nil {
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data())
+  assert parsed == mesv_test.expected_normal_data()
     as "Parsing default parameters | Headers, HeadersMustContain pass"
 }
 
@@ -159,15 +152,15 @@ pub fn default_unordered_exact_fail_test() -> Nil {
       "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed
-    == Error(
-      ExpectedHeadersMismatch(HeadersMustContain(["Comment", "Name", "Age"]), [
-        "Name",
-        "Age",
-        "comment",
-      ]),
-    )
-    as "Parsing default parameters | Headers, HeadersMustContain fail"
+  assert parsed == [] as
+    // Error(
+    //   ExpectedHeadersMismatch(HeadersMustContain(["Comment", "Name", "Age"]), [
+    //     "Name",
+    //     "Age",
+    //     "comment",
+    //   ]),
+    // )
+    "Parsing default parameters | Headers, HeadersMustContain fail"
 }
 
 pub fn default_ordered_match_pass_test() -> Nil {
@@ -187,7 +180,7 @@ pub fn default_ordered_match_pass_test() -> Nil {
       "NaMe,AgE,CoMmEnT\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data())
+  assert parsed == mesv_test.expected_normal_data()
     as "Parsing default parameters | Headers, InOrderMustPass pass"
 }
 
@@ -208,7 +201,7 @@ pub fn default_ordered_match_fail_test() -> Nil {
       "name.,age.,comment.\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed != Ok(mesv_test.expected_normal_data()) as
+  assert parsed != mesv_test.expected_normal_data() as
     // Impossible to test for equality between objects containing functions
     "Parsing default parameters | Headers, InOrderMustPass fail"
 }
@@ -230,7 +223,7 @@ pub fn default_unordered_match_pass_test() -> Nil {
       "NaMe,CoMmEnT,AgE\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data())
+  assert parsed == mesv_test.expected_normal_data()
     as "Parsing default parameters | Headers, HeadersMustContainPassing pass"
 }
 
@@ -251,7 +244,7 @@ pub fn default_unordered_match_fail_test() -> Nil {
       "name.,comment.,age.\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed != Ok(mesv_test.expected_normal_data()) as
+  assert parsed != mesv_test.expected_normal_data() as
     // Impossible to test for equality between objects containing functions
     "Parsing default parameters | Headers, HeadersMustContainPassing fail"
 }
@@ -270,7 +263,7 @@ pub fn default_header_expectation_transform_lowercase_test() -> Nil {
       "NAME,AGE,COMMENT\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data()) as
+  assert parsed == mesv_test.expected_normal_data() as
     // Impossible to test for equality between objects containing functions
     "Parsing default parameters | Headers, transform_headers InOrderExact make lowercase"
 }
@@ -292,7 +285,7 @@ pub fn default_header_expectation_transform_trim_test() -> Nil {
       "name    ,age    ,\"  comment  \"\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed == Ok(mesv_test.expected_normal_data()) as
+  assert parsed == mesv_test.expected_normal_data() as
     // Impossible to test for equality between objects containing functions
     "Parsing default parameters | Headers, transform_headers InOrderExact lowercase trim"
 }
