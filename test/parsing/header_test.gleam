@@ -1,4 +1,8 @@
-import mesv/parse.{ExpectedHeadersMismatch, InOrderExact, Text}
+import gleam/string
+import mesv/parse.{
+  ExpectedHeadersMismatch, HeadersMustContain, HeadersMustContainPassing,
+  InOrderExact, InOrderMustPass, Text,
+}
 import mesv_test
 
 pub fn old_header_behaviour_normal_test() -> Nil {
@@ -36,4 +40,168 @@ pub fn old_header_behaviour_error_test() -> Nil {
       ]),
     )
     as "Parsing default parameters | Old header behaviour, expected error"
+}
+
+pub fn default_ordered_exact_pass_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(InOrderExact(["Name", "Age", "Comment"]))
+    |> parse.run(Text(
+      "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed == Ok(mesv_test.expected_normal_data())
+    as "Parsing default parameters | Headers, InOrderExact pass"
+}
+
+pub fn default_ordered_exact_fail_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(InOrderExact(["Name", "Age", "Comment"]))
+    |> parse.run(Text(
+      "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed
+    == Error(
+      ExpectedHeadersMismatch(InOrderExact(["Name", "Age", "Comment"]), [
+        "Name",
+        "Age",
+        "comment",
+      ]),
+    )
+    as "Parsing default parameters | Headers, InOrderExact fail"
+}
+
+pub fn default_unordered_exact_pass_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(
+      HeadersMustContain(["Comment", "Name", "Age"]),
+    )
+    |> parse.run(Text(
+      "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed == Ok(mesv_test.expected_normal_data())
+    as "Parsing default parameters | Headers, HeadersMustContain pass"
+}
+
+pub fn default_unordered_exact_fail_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(
+      HeadersMustContain(["Comment", "Name", "Age"]),
+    )
+    |> parse.run(Text(
+      "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed
+    == Error(
+      ExpectedHeadersMismatch(HeadersMustContain(["Comment", "Name", "Age"]), [
+        "Name",
+        "Age",
+        "comment",
+      ]),
+    )
+    as "Parsing default parameters | Headers, HeadersMustContain fail"
+}
+
+pub fn default_ordered_match_pass_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(
+      InOrderMustPass([
+        fn(h) { string.lowercase(h) == "name" },
+        fn(h) { string.lowercase(h) == "age" },
+        fn(h) { string.lowercase(h) == "comment" },
+      ]),
+    )
+    |> parse.run(Text(
+      "NaMe,AgE,CoMmEnT\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed == Ok(mesv_test.expected_normal_data())
+    as "Parsing default parameters | Headers, InOrderMustPass pass"
+}
+
+pub fn default_ordered_match_fail_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(
+      InOrderMustPass([
+        fn(h) { string.lowercase(h) == "name" },
+        fn(h) { string.lowercase(h) == "age" },
+        fn(h) { string.lowercase(h) == "comment" },
+      ]),
+    )
+    |> parse.run(Text(
+      "name.,age.,comment.\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed != Ok(mesv_test.expected_normal_data()) as
+    // Impossible to test for equality between objects containing functions
+    "Parsing default parameters | Headers, InOrderMustPass fail"
+}
+
+pub fn default_unordered_match_pass_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(
+      HeadersMustContainPassing([
+        fn(h) { string.lowercase(h) == "name" },
+        fn(h) { string.lowercase(h) == "age" },
+        fn(h) { string.lowercase(h) == "comment" },
+      ]),
+    )
+    |> parse.run(Text(
+      "NaMe,CoMmEnT,AgE\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed == Ok(mesv_test.expected_normal_data())
+    as "Parsing default parameters | Headers, HeadersMustContainPassing pass"
+}
+
+pub fn default_unordered_match_fail_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(
+      HeadersMustContainPassing([
+        fn(h) { string.lowercase(h) == "name" },
+        fn(h) { string.lowercase(h) == "age" },
+        fn(h) { string.lowercase(h) == "comment" },
+      ]),
+    )
+    |> parse.run(Text(
+      "name.,comment.,age.\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+
+  assert parsed != Ok(mesv_test.expected_normal_data()) as
+    // Impossible to test for equality between objects containing functions
+    "Parsing default parameters | Headers, HeadersMustContainPassing fail"
 }
