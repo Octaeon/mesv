@@ -127,6 +127,7 @@ pub type PreprocessingError {
   /// it equaled.
   /// 
   HeadersMismatch(found_headers: List(String), results: List(Result(Int, Nil)))
+  FailedHeaderParsing(reason: DataRowError(Nil))
   SourceEmpty
 }
 
@@ -628,7 +629,19 @@ fn make_header_processor(
   parser: Parser(a, e),
 ) -> fn(ExpectedHeaders, List(String)) ->
   Result(HeaderAction, PreprocessingError) {
-  let unescape = make_unescaper(parser)
+  let unescape = fn(cell) {
+    make_unescaper(parser)(cell)
+    |> result.map_error(fn(err) {
+      FailedHeaderParsing(case err {
+        CellParsingFailed(cell, _) -> CellParsingFailed(cell, Nil)
+        NotEnoughCells -> NotEnoughCells
+        TooManyCells(leftovers) -> TooManyCells(leftovers)
+        DataUnescapedEscapers(field) -> DataUnescapedEscapers(field)
+        DataMismatchedEscapers(field) -> DataMismatchedEscapers(field)
+        DataNonDuplicatedEscapers(field) -> DataNonDuplicatedEscapers(field)
+      })
+    })
+  }
 
   fn(expected: ExpectedHeaders, found: List(String)) -> Result(
     HeaderAction,
