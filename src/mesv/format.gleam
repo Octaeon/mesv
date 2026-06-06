@@ -79,6 +79,7 @@ pub opaque type Formatter(a) {
     column_separator: String,
     row_separator: String,
     escaper: String,
+    metadata_separator: String,
     escape_all: Bool,
     headers: Option(List(String)),
     formatter: fn(a) -> List(String),
@@ -118,6 +119,7 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
     column_separator: ",",
     row_separator: "\n",
     escaper: "\"",
+    metadata_separator: ":",
     escape_all: False,
     headers: None,
     formatter: f,
@@ -168,6 +170,13 @@ pub fn set_escaper(
   new_escaper: String,
 ) -> Formatter(a) {
   Formatter(..formatter, escaper: new_escaper)
+}
+
+pub fn set_meta_sep(
+  formatter: Formatter(a),
+  new_metadata_separator: String,
+) -> Formatter(a) {
+  Formatter(..formatter, metadata_separator: new_metadata_separator)
 }
 
 /// Function to specify whether to wrap each value in an escaper, regardles of necessity.
@@ -259,6 +268,7 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
     column_separator,
     row_separator,
     _escaper,
+    _metadata_separator,
     _escape_all,
     maybe_headers,
     to_string,
