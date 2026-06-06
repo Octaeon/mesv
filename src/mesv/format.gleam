@@ -270,7 +270,7 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   }
   |> list.map(fn(values: List(String)) -> String {
     values
-    |> list.map(string.trim)
+    // |> list.map(string.trim)
     |> list.map(make_ensafeify(formatter))
     |> string.join(column_separator)
   })
@@ -293,7 +293,7 @@ pub fn preprocess(
         Some(headers) -> {
           let row =
             headers
-            |> list.map(string.trim)
+            // |> list.map(string.trim)
             |> list.map(make_ensafeify(formatter))
             |> string.join(formatter.column_separator)
           #(
