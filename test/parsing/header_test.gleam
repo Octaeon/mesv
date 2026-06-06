@@ -1,7 +1,8 @@
 import gleam/string
 import mesv/parse.{
-  HeadersMismatch, HeadersMustContain, HeadersMustContainPassing, Ignore,
-  InOrderExact, InOrderMustPass, Text,
+  DataUnescapedEscapers, FailedHeaderParsing, HeadersMismatch,
+  HeadersMustContain, HeadersMustContainPassing, Ignore, InOrderExact,
+  InOrderMustPass, Text,
 }
 import mesv_test
 
@@ -72,8 +73,28 @@ pub fn default_skip_empty_row_test() -> Nil {
     |> parse.then()
     |> parse.just_data()
 
-  assert parsed == Ok(mesv_test.expected_normal_data())
-    as "Parsing default parameters | Headers, Skip empty header row"
+  assert parsed == Ok(mesv_test.expected_normal_data()) as
+    // When Ignoring a row, no need to check if there are enough columns or anything
+    "Parsing default parameters | Headers, Ignore empty header row"
+}
+
+pub fn default_skip_empty_row_strict_columns_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let parsed =
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
+    |> parse.set_expected_headers(Ignore)
+    |> parse.set_strict_columns()
+    |> parse.preprocess(Text(
+      "\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+    ))
+    |> parse.then()
+    |> parse.just_data()
+
+  assert parsed == Ok(mesv_test.expected_normal_data()) as
+    // When Ignoring a row, no need to check if there are enough columns or anything
+    "Parsing default parameters | Headers, Ignore empty header row even if there aren't enough cells in strict"
 }
 
 pub fn default_skip_malformed_test() -> Nil {
@@ -90,12 +111,16 @@ pub fn default_skip_malformed_test() -> Nil {
     |> parse.then()
     |> parse.just_data()
 
-  assert parsed == Ok(mesv_test.expected_normal_data()) as
-    // I'm not yet certain whether this is the kind of behaviour I want to happen, but if the user
-    // states they want to "Skip" the first row, doesn't that imply they don't care about what's inside of it?
-    // Maybe I should rename that option to "Ignore" - that would imply parsing the first row but ignoring its'
-    // contents, not just jumping over it.
-    "Parsing default parameters | Headers, Skip malformed header row"
+  assert parsed
+    == Error(
+      FailedHeaderParsing(DataUnescapedEscapers(
+        "and \"they're not\" even properly escaped!",
+      )),
+    )
+    as
+    // I have decided to process the first row even if the user specified to ignore it, and if its'
+    // malformed, to throw an error.
+    "Parsing default parameters | Headers, Ignore don't allow malformed values"
 }
 
 pub fn default_ordered_exact_pass_test() -> Nil {
@@ -272,14 +297,14 @@ pub fn default_unordered_match_fail_test() -> Nil {
       ]),
     )
     |> parse.preprocess(Text(
-      "name.,comment.,age.\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
+      "name.,comment|age,aGe\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
     |> parse.just_data()
 
   assert parsed
     == Error(
-      HeadersMismatch(["name", "comment|age", "aGe"], [
+      HeadersMismatch(["name.", "comment|age", "aGe"], [
         Error(Nil),
         Error(Nil),
         Ok(1),
@@ -332,5 +357,5 @@ pub fn default_header_expectation_transform_trim_test() -> Nil {
 
   assert parsed == Ok(mesv_test.expected_normal_data()) as
     // Impossible to test for equality between objects containing functions
-    "Parsing default parameters | Headers, transform_headers InOrderExact lowercase trim"
+    "Parsing default parameters | Headers, transform_headers HeadersMustContain lowercase trim"
 }
