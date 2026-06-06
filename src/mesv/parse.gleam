@@ -646,66 +646,167 @@ fn make_header_processor(
     HeaderAction,
     PreprocessingError,
   ) {
-    let match = fn(passed: Bool) -> Result(HeaderAction, PreprocessingError) {
-      case passed {
-        True -> Ok(SkipFirstRow)
-        False -> Error(HeadersMismatch(found, []))
+    // First unescape all headers. If the header row has an incorrect format, even if the
+    // user selected to skip it, the parsing will return an error.
+    use processed_headers <- result.try(result.all(found |> list.map(unescape)))
+
+    // Based on the length of the requirements and the found headers,
+    // decide whether to proceed or return a PreprocessingError.
+    let length_guard = fn(req: List(f)) -> Result(List(f), PreprocessingError) {
+      let requirements = list.length(req)
+      let headers = list.length(processed_headers)
+      case requirements <= headers, headers <= requirements {
+        False, _ -> Error(FailedHeaderParsing(NotEnoughCells))
+        True, True -> Ok(req)
+        True, False if parser.strict_columns -> {
+          Error(FailedHeaderParsing(TooManyCells(processed_headers)))
+        }
+        True, False -> Ok(req)
       }
     }
 
     case expected {
       Ignore -> Ok(SkipFirstRow)
       Empty -> Ok(ParseFirstRow)
-      InOrderExact(ordered_exact) -> {
-        use processed_headers <- result.try(result.all(
-          found |> list.map(unescape),
-        ))
-        {
-          { list.length(ordered_exact) <= list.length(processed_headers) }
-          && list.map2(
-            ordered_exact,
-            processed_headers,
-            fn(expected_col: String, found_col: String) -> Bool {
-              expected_col == found_col
-            },
-          )
-          |> list.all(function.identity)
-        }
-        |> match()
-      }
-      HeadersMustContain(unordered_exact) -> {
-        use processed_headers <- result.try(result.all(
-          found |> list.map(unescape),
-        ))
-        unordered_exact
-        |> list.all(list.contains(processed_headers, _))
-        |> match()
-      }
-      InOrderMustPass(ordered_custom) -> {
-        {
-          use processed_headers <- result.try(result.all(
-            found |> list.map(unescape),
-          ))
-          {
-            { list.length(ordered_custom) <= list.length(processed_headers) }
-            && list.map2(
-              ordered_custom,
+      InOrderExact(ordered_exact) ->
+        ordered_exact
+        |> length_guard()
+        |> result.try(fn(required_headers: List(String)) {
+          let matching =
+            list.map2(
+              required_headers,
               processed_headers,
-              fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
+              fn(expected_col: String, found_col: String) -> Bool {
+                expected_col == found_col
+              },
             )
-            |> list.all(function.identity)
+
+          case list.all(matching, function.identity) {
+            True -> Ok(SkipFirstRow)
+            False ->
+              Error(HeadersMismatch(
+                processed_headers,
+                matching
+                  |> list.index_map(fn(passed, index) {
+                    case passed {
+                      True -> Ok(index)
+                      False -> Error(Nil)
+                    }
+                  }),
+              ))
           }
-          |> match()
-        }
-      }
-      HeadersMustContainPassing(unordered_custom) -> {
-        use processed_headers <- result.try(result.all(
-          found |> list.map(unescape),
-        ))
+        })
+
+      HeadersMustContain(unordered_exact) ->
+        unordered_exact
+        |> length_guard()
+        |> result.try(fn(requirements: List(String)) {
+          // TODO : As of right now, this implementation only checks whether each header passes
+          // one requirement, not that each requirement has its' own unique header that passed it.
+          // What this means is, if a requirement that happens to be earlier has two headers that
+          // match, and takes the first, and a requirement later on only has one header that was already
+          // taken, it would cause an error, even though it should've been fine.
+
+          // This is not relevant at all yet, and there aren't any tests for this, but it is something
+          // I felt the need to note.
+          let headers_matching_map =
+            requirements
+            |> list.map(fn(req) {
+              // For each requirement, check all headers to see if they match
+              list.map(processed_headers, fn(el) { el == req })
+            })
+            // turn the list of requirements' headers that pass to a list of
+            // headers' requirements that they pass
+            |> list.transpose()
+            // For each of the found headers, get the index of the first requirement it satisfies,
+            // or if it doesn't satisfy any, `Error(Nil)`.
+            |> list.map(fn(header_passing_reqs) {
+              header_passing_reqs
+              |> list.index_map(fn(passed_req, index) { #(index, passed_req) })
+              |> list.find_map(fn(first_passing_req) {
+                case first_passing_req.1 {
+                  True -> Ok(first_passing_req.0)
+                  False -> Error(Nil)
+                }
+              })
+            })
+
+          case result.all(headers_matching_map) {
+            Ok(_) -> Ok(SkipFirstRow)
+            Error(_) ->
+              Error(HeadersMismatch(processed_headers, headers_matching_map))
+          }
+        })
+
+      InOrderMustPass(ordered_custom) ->
+        ordered_custom
+        |> length_guard()
+        |> result.try(fn(required_headers: List(fn(String) -> Bool)) {
+          let matching =
+            list.map2(
+              required_headers,
+              processed_headers,
+              fn(must_pass: fn(String) -> Bool, found_col: String) -> Bool {
+                must_pass(found_col)
+              },
+            )
+
+          case list.all(matching, function.identity) {
+            True -> Ok(SkipFirstRow)
+            False ->
+              Error(HeadersMismatch(
+                processed_headers,
+                matching
+                  |> list.index_map(fn(passed, index) {
+                    case passed {
+                      True -> Ok(index)
+                      False -> Error(Nil)
+                    }
+                  }),
+              ))
+          }
+        })
+
+      HeadersMustContainPassing(unordered_custom) ->
         unordered_custom
-        |> list.all(list.any(processed_headers, _))
-        |> match()
-      }
+        |> length_guard()
+        |> result.try(fn(requirements: List(fn(String) -> Bool)) {
+          // TODO : As of right now, this implementation only checks whether each header passes
+          // one requirement, not that each requirement has its' own unique header that passed it.
+          // What this means is, if a requirement that happens to be earlier has two headers that
+          // match, and takes the first, and a requirement later on only has one header that was already
+          // taken, it would cause an error, even though it should've been fine.
+
+          // This is not relevant at all yet, and there aren't any tests for this, but it is something
+          // I felt the need to note.
+          let headers_matching_map =
+            requirements
+            |> list.map(fn(req) {
+              // For each requirement, check all headers to see if they satisfy the requirement
+              list.map(processed_headers, fn(el) { req(el) })
+            })
+            // turn the list of requirements' headers that pass to a list of
+            // headers' requirements that they pass
+            |> list.transpose()
+            // For each of the found headers, get the index of the first requirement it satisfies,
+            // or if it doesn't satisfy any, `Error(Nil)`.
+            |> list.map(fn(header_passing_reqs) {
+              header_passing_reqs
+              |> list.index_map(fn(passed_req, index) { #(index, passed_req) })
+              |> list.find_map(fn(first_passing_req) {
+                case first_passing_req.1 {
+                  True -> Ok(first_passing_req.0)
+                  False -> Error(Nil)
+                }
+              })
+            })
+
+          case result.all(headers_matching_map) {
+            Ok(_) -> Ok(SkipFirstRow)
+            Error(_) ->
+              Error(HeadersMismatch(processed_headers, headers_matching_map))
+          }
+        })
     }
   }
 }
