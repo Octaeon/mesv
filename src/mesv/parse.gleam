@@ -1125,3 +1125,28 @@ pub fn parse(
 pub fn get_parsed(rows: List(Result(a, DataRowError(e)))) -> List(a) {
   rows |> list.filter_map(function.identity)
 }
+
+pub fn then(
+  preprocessed: Result(
+    #(List(#(String, String)), Parser(a, e), CsvSource),
+    PreprocessingError,
+  ),
+) -> Result(
+  #(List(#(String, String)), List(Result(a, DataRowError(e)))),
+  PreprocessingError,
+) {
+  preprocessed
+  |> result.map(fn(a) {
+    let #(metadata, parser, csv_source) = a
+    #(metadata, run(parser, csv_source))
+  })
+}
+
+pub fn just_data(
+  processed: Result(
+    #(List(#(String, String)), List(Result(a, DataRowError(e)))),
+    PreprocessingError,
+  ),
+) -> Result(List(Result(a, DataRowError(e))), PreprocessingError) {
+  result.map(processed, pair.second)
+}
