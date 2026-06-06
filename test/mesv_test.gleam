@@ -75,20 +75,20 @@ pub fn expected_escaper_data(esc: String) -> List(Result(RowData, b)) {
   escaper_data(esc) |> list.map(Ok)
 }
 
+pub fn parse_row_data() -> fn(String) -> fn(Int) -> fn(String) -> RowData {
+  use name <- mesv.parsed
+  use age <- mesv.parsed
+  use comment <- mesv.parsed
+  RowData(name, age, comment)
+}
+
 pub fn build_test_unit_parser(
+  parser: Parser(a),
   col_sep: String,
   row_sep: String,
   escaper: String,
-) -> Parser(RowData) {
-  parse.build({
-    use name <- mesv.parsed
-    use age <- mesv.parsed
-    use comment <- mesv.parsed
-    RowData(name, age, comment)
-  })
-  |> parse.column(Ok)
-  |> parse.column(int.parse)
-  |> parse.column(Ok)
+) -> Parser(a) {
+  parser
   |> parse.set_col_sep(col_sep)
   |> parse.set_row_sep(row_sep)
   |> parse.set_escaper(escaper)
@@ -100,16 +100,37 @@ pub fn format_row_data(row: RowData) -> List(String) {
 }
 
 pub fn build_test_unit_formatter(
-  to_str: fn(RowData) -> List(String),
+  to_str: fn(a) -> List(String),
   col_sep: String,
   row_sep: String,
   escaper: String,
-) -> Formatter(RowData) {
+) -> Formatter(a) {
   to_str
   |> format.build()
   |> format.set_col_sep(col_sep)
   |> format.set_row_sep(row_sep)
   |> format.set_escaper(escaper)
+}
+
+pub fn row_data_formatter(
+  col_sep: String,
+  row_sep: String,
+  escaper: String,
+) -> Formatter(RowData) {
+  format_row_data
+  |> build_test_unit_formatter(col_sep, row_sep, escaper)
+}
+
+pub fn row_data_parser(
+  col_sep: String,
+  row_sep: String,
+  escaper: String,
+) -> Parser(RowData) {
+  parse.build(parse_row_data())
+  |> parse.column(Ok)
+  |> parse.column(int.parse)
+  |> parse.column(Ok)
+  |> build_test_unit_parser(col_sep, row_sep, escaper)
 }
 
 /// Main function that acts as the entrypoint for the testing library `gleeunit`.

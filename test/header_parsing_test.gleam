@@ -6,7 +6,7 @@ pub fn old_header_behaviour_normal_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.expect_headers(["Name", "Age", "Comment"])
     |> parse.run(Text(
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
@@ -21,7 +21,7 @@ pub fn old_header_behaviour_error_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.expect_headers(["Name", "Age", "Comment"])
     |> parse.run(Text(
       "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",

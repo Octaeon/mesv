@@ -5,40 +5,20 @@
 //// `a == parse(format(a))`, then using the `mesv.format` and `mesv.parse` modules to convert to csv and back will satisfy the condition
 //// `List(a) == mesv.parse(mesv.format(List(a)))`, no matter the specified separators and escapers.
 
-import gleam/int
 import gleam/list
-import mesv
 import mesv/format.{type Formatter}
 import mesv/parse.{type Parser, type ParsingError, Text}
-import mesv_test.{type RowData, RowData}
+import mesv_test.{type RowData}
 
 fn build_test_unit_parser_and_formatter(
   col_sep: String,
   row_sep: String,
   escaper: String,
 ) -> #(Formatter(RowData), Parser(RowData)) {
-  let formatter =
-    format.build(fn(row: RowData) -> List(String) {
-      let RowData(name, age, comment) = row
-      [name, int.to_string(age), comment]
-    })
-    |> format.set_col_sep(col_sep)
-    |> format.set_row_sep(row_sep)
-    |> format.set_escaper(escaper)
-  let parser =
-    parse.build({
-      use name <- mesv.parsed
-      use age <- mesv.parsed
-      use comment <- mesv.parsed
-      RowData(name, age, comment)
-    })
-    |> parse.column(Ok)
-    |> parse.column(int.parse)
-    |> parse.column(Ok)
-    |> parse.set_col_sep(col_sep)
-    |> parse.set_row_sep(row_sep)
-    |> parse.set_escaper(escaper)
-  #(formatter, parser)
+  #(
+    mesv_test.row_data_formatter(col_sep, row_sep, escaper),
+    mesv_test.row_data_parser(col_sep, row_sep, escaper),
+  )
 }
 
 fn build_test_unit(

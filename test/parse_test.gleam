@@ -6,7 +6,7 @@ pub fn default_normal_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
@@ -17,7 +17,7 @@ pub fn default_normal_test() -> Nil {
 
 pub fn whitespace_test() -> Nil {
   let parsed =
-    mesv_test.build_test_unit_parser(",", "\n", "\"")
+    mesv_test.row_data_parser(",", "\n", "\"")
     |> parse.run(Text(
       "Alex,23,  This is a pretty cool library  \nBartholemew, 24,Yeah I agree",
     ))
@@ -31,7 +31,7 @@ pub fn bad_escapers_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Adam,23,Likes to \"mess\" with parsers\n"
       <> "Bob,45,\"Doesn't understand that \"\"\"internal escapers\"\"\" should be duplicated, not triplicated\"",
@@ -55,7 +55,7 @@ pub fn bad_escapers_test() -> Nil {
 pub fn escaped_whitespace_test() -> Nil {
   let col_sep = ","
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, "\n", "\"")
+    mesv_test.row_data_parser(col_sep, "\n", "\"")
     |> parse.run(Text(
       "Alex,23,\"   This is a pretty good library, don't you think?   \"\nBartholemew,24,\" Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\"",
     ))
@@ -67,7 +67,7 @@ pub fn escaped_whitespace_test() -> Nil {
 pub fn padded_escaped_cell_test() -> Nil {
   let col_sep = ","
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, "\n", "\"")
+    mesv_test.row_data_parser(col_sep, "\n", "\"")
     |> parse.run(Text(
       "Alex,23,  \"This is a pretty good library, don't you think?   \" \n   Bartholemew,24, \" Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\"",
     ))
@@ -81,7 +81,7 @@ pub fn default_column_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex,23,\"This is a pretty good library, don't you think?\"\nBartholemew,24,\"Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\"",
     ))
@@ -95,7 +95,7 @@ pub fn default_row_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex,23,\"It should be able to, right?\"\nBartholemew,24,\"Maybe column separators,\nbut what about row separators?\"",
     ))
@@ -109,7 +109,7 @@ pub fn default_escaper_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Bartholemew,24,\"Huh, it worked. Now only escapers remain.\"\nAlex,23,What are escapers?\nBartholemew,24,\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\"",
     ))
@@ -124,7 +124,7 @@ pub fn custom_col_normal_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex|23|This is a pretty cool library\nBartholemew|24|Yeah I agree",
     ))
@@ -138,7 +138,7 @@ pub fn custom_col_column_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex|23|This is a pretty good library, don't you think?\nBartholemew|24|\"Yeah, it's pretty good, but are you sure it can handle escaping separators? Try | this. heh\"",
     ))
@@ -152,7 +152,7 @@ pub fn custom_col_row_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex|23|It should be able to, right?\nBartholemew|24|\"Maybe column separators,\nbut what about row separators?\"",
     ))
@@ -166,7 +166,7 @@ pub fn custom_col_escaper_test() -> Nil {
   let row_sep = "\n"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Bartholemew|24|Huh, it worked. Now only escapers remain.\nAlex|23|What are escapers?\nBartholemew|24|\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\"",
     ))
@@ -181,7 +181,7 @@ pub fn custom_row_normal_test() -> Nil {
   let row_sep = "|"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex,23,This is a pretty cool library|Bartholemew,24,Yeah I agree",
     ))
@@ -195,7 +195,7 @@ pub fn custom_row_column_separator_test() -> Nil {
   let row_sep = "|"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex,23,\"This is a pretty good library, don't you think?\"|Bartholemew,24,\"Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\"",
     ))
@@ -209,7 +209,7 @@ pub fn custom_row_row_separator_test() -> Nil {
   let row_sep = "|"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex,23,\"It should be able to, right?\"|Bartholemew,24,\"Maybe column separators,|but what about row separators?\"",
     ))
@@ -223,7 +223,7 @@ pub fn custom_row_escaper_test() -> Nil {
   let row_sep = "|"
   let esc = "\""
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Bartholemew,24,\"Huh, it worked. Now only escapers remain.\"|Alex,23,What are escapers?|Bartholemew,24,\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\"",
     ))
@@ -238,7 +238,7 @@ pub fn custom_esc_normal_test() -> Nil {
   let row_sep = "\n"
   let esc = "'"
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
@@ -252,7 +252,7 @@ pub fn custom_esc_column_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "'"
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex,23,'This is a pretty good library, don''t you think?'\nBartholemew,24,'Yeah, it''s pretty good, but are you sure it can handle escaping separators? Try , this. heh'",
     ))
@@ -266,7 +266,7 @@ pub fn custom_esc_row_separator_test() -> Nil {
   let row_sep = "\n"
   let esc = "'"
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex,23,'It should be able to, right?'\nBartholemew,24,'Maybe column separators,\nbut what about row separators?'",
     ))
@@ -280,7 +280,7 @@ pub fn custom_esc_escaper_test() -> Nil {
   let row_sep = "\n"
   let esc = "'"
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Bartholemew,24,'Huh, it worked. Now only escapers remain.'\nAlex,23,What are escapers?\nBartholemew,24,'They''re what wrap a value if it contains reserved elements. Right now, it''s '''",
     ))
@@ -295,7 +295,7 @@ pub fn combined_normal_test() -> Nil {
   let row_sep = ";"
   let esc = "'"
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex|23|This is a pretty cool library;Bartholemew|24|Yeah I agree",
     ))
@@ -309,7 +309,7 @@ pub fn combined_column_separator_test() -> Nil {
   let row_sep = ";"
   let esc = "'"
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex|23|'This is a pretty good library, don''t you think?';Bartholemew|24|'Yeah, it''s pretty good, but are you sure it can handle escaping separators? Try | this. heh'",
     ))
@@ -323,7 +323,7 @@ pub fn combined_row_separator_test() -> Nil {
   let row_sep = ";"
   let esc = "'"
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Alex|23|It should be able to, right?;Bartholemew|24|'Maybe column separators,;but what about row separators?'",
     ))
@@ -337,7 +337,7 @@ pub fn combined_escaper_test() -> Nil {
   let row_sep = ";"
   let esc = "'"
   let parsed =
-    mesv_test.build_test_unit_parser(col_sep, row_sep, esc)
+    mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.run(Text(
       "Bartholemew|24|Huh, it worked. Now only escapers remain.;Alex|23|What are escapers?;Bartholemew|24|'They''re what wrap a value if it contains reserved elements. Right now, it''s '''",
     ))

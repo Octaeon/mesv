@@ -6,12 +6,7 @@ fn build_formatter(
   row_sep: String,
   esc: String,
 ) -> Formatter(RowData) {
-  mesv_test.build_test_unit_formatter(
-    mesv_test.format_row_data,
-    col_sep,
-    row_sep,
-    esc,
-  )
+  mesv_test.row_data_formatter(col_sep, row_sep, esc)
 }
 
 pub fn default_normal_test() -> Nil {
