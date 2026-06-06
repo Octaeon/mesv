@@ -177,6 +177,11 @@ pub fn set_escaper(
   Formatter(..formatter, escaper: new_escaper)
 }
 
+/// Function to set custom metadata separator - ie, the character that separates the metadata
+/// `key` from its `value`.
+/// 
+/// By default, it's `:`
+/// 
 pub fn set_meta_sep(
   formatter: Formatter(a),
   new_metadata_separator: String,
@@ -254,11 +259,11 @@ fn make_to_escape(
       "\r",
     ]
     Data -> [
-    formatter.column_separator,
-    formatter.row_separator,
-    formatter.escaper,
-    "\n",
-    "\r",
+      formatter.column_separator,
+      formatter.row_separator,
+      formatter.escaper,
+      "\n",
+      "\r",
     ]
   }
   |> needs_escaping()
@@ -277,11 +282,19 @@ fn make_ensafeify(
   }
 }
 
-/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
-/// and encodes it into a String.
+/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`, and encodes
+/// it into a String.
 /// 
-/// All of the configuration options need to be set when building the `Formatter`,
-/// so this function is very simple to understand.
+/// All of the configuration options need to be set when building the `Formatter`, so
+/// this function should be very simple to understand.
+/// 
+/// If you run this function without first running [`format.preprocess`](format.html#preprocess),
+/// it will still prepend the headers row to the output CSV file, if you specified them. However,
+/// if you do first call `preprocess`, then `preprocess` will be the function which adds the
+/// header row, and the returned `Formatter` will be modified to not add any headers. So,
+/// unless you discard the modified `Formatter` returned from the `preprocess` function and
+/// reuse the original one while still using the metadata `String` returned by `preprocess`,
+/// the headers will not be duplicated.
 /// 
 pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   let Formatter(
@@ -306,6 +319,21 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   |> string.join(row_separator)
 }
 
+/// Execution function that takes in a `Formatter(a)` as well as a `List(#(String, String))`,
+/// and uses the configured separators and escapers to format the provided metadata and
+/// headers into a String, and updating the `Formatter` to avoid duplicating headers when
+/// it is passed into the [`format.run`](format.html#run) function.
+/// 
+/// The `List` being passed in should follow the structure one would use to create a `dict`
+/// - that being, the first `String` of the tuple is the key, and the second is the value.
+/// 
+/// All of the configuration options need to be set when building the `Formatter`, so this
+/// function should be very simple to understand.
+/// 
+/// After calling this function, you can also use the [`format.then`](format.html#then)
+/// function to cleanly call the [`run`](format.html#run) function instead of having to
+/// deconstruct the output tuple yourself.
+/// 
 pub fn preprocess(
   formatter: Formatter(a),
   metadata: List(#(String, String)),
@@ -347,6 +375,10 @@ fn make_metadata_formatter(
   }
 }
 
+/// Helper function to use after calling the [`format.preprocess`](format.html#preprocess)
+/// function to format metadata using a configured `Formatter`. Use it just as you would
+/// the [`format.run`](format.html#run) function, just only after calling the `preprocess`.
+/// 
 pub fn then(in: #(Formatter(a), String), format: List(a)) -> String {
   let #(formatter, string) = in
 
