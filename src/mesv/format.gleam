@@ -86,6 +86,11 @@ pub opaque type Formatter(a) {
   )
 }
 
+type EscapeWhich {
+  Metadata
+  Data
+}
+
 /// Function for directly building a `Formatter` that outputs the specified
 /// elements in an exact order.
 /// 
@@ -196,7 +201,8 @@ pub fn set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a) {
 /// 
 fn needs_escaping(prohibited: List(String)) -> fn(String) -> Bool {
   fn(el: String) -> Bool {
-    prohibited |> list.any(fn(s: String) -> Bool { string.contains(el, s) })
+    prohibited
+    |> list.any(fn(s: String) -> Bool { string.contains(el, s) })
   }
 }
 
@@ -235,22 +241,36 @@ fn escapeify(formatter: Formatter(a)) -> fn(String) -> String {
   }
 }
 
-fn make_to_escape(formatter: Formatter(a)) -> fn(String) -> Bool {
-  needs_escaping([
+fn make_to_escape(
+  formatter: Formatter(a),
+  field: EscapeWhich,
+) -> fn(String) -> Bool {
+  case field {
+    Metadata -> [
+      formatter.row_separator,
+      formatter.metadata_separator,
+      formatter.escaper,
+      "\n",
+      "\r",
+    ]
+    Data -> [
     formatter.column_separator,
     formatter.row_separator,
     formatter.escaper,
     "\n",
     "\r",
-    ":",
-    // Metadata key-value separator. Quick and dirty solution, will be changed.
-  ])
+    ]
+  }
+  |> needs_escaping()
 }
 
-fn make_ensafeify(formatter: Formatter(a)) -> fn(String) -> String {
+fn make_ensafeify(
+  formatter: Formatter(a),
+  field: EscapeWhich,
+) -> fn(String) -> String {
   let ensafeify = escapeify(formatter)
   fn(val: String) -> String {
-    case formatter.escape_all || make_to_escape(formatter)(val) {
+    case formatter.escape_all || make_to_escape(formatter, field)(val) {
       True -> ensafeify(val)
       False -> val
     }
@@ -280,7 +300,7 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   }
   |> list.map(fn(values: List(String)) -> String {
     values
-    |> list.map(make_ensafeify(formatter))
+    |> list.map(make_ensafeify(formatter, Data))
     |> string.join(column_separator)
   })
   |> string.join(row_separator)
@@ -302,7 +322,7 @@ pub fn preprocess(
         Some(headers) -> {
           let row =
             headers
-            |> list.map(make_ensafeify(formatter))
+            |> list.map(make_ensafeify(formatter, Data))
             |> string.join(formatter.column_separator)
           #(
             Formatter(..formatter, headers: None),
@@ -318,7 +338,7 @@ pub fn preprocess(
 fn make_metadata_formatter(
   formatter: Formatter(a),
 ) -> fn(#(String, String)) -> String {
-  let ensafeify = make_ensafeify(formatter)
+  let ensafeify = make_ensafeify(formatter, Metadata)
   fn(metadata: #(String, String)) -> String {
     ensafeify(metadata.0)
     <> ":"
