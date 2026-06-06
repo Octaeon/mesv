@@ -1,7 +1,7 @@
 import gleam/string
 import mesv/parse.{
   ExpectedHeadersMismatch, HeadersMustContain, HeadersMustContainPassing,
-  InOrderExact, InOrderMustPass, MalformedCell, Skip, Text,
+  InOrderExact, InOrderMustPass, Skip, Text,
 }
 import mesv_test
 

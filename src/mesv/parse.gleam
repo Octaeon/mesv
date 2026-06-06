@@ -97,6 +97,7 @@ import gleam/function
 import gleam/int
 import gleam/io
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
@@ -664,7 +665,7 @@ fn take_until_unescaped(
   not_in escaper: String,
 ) -> fn(String) -> Result(#(String, String), String) {
   fn(source: String) -> Result(#(String, String), String) {
-    take_until_unescaped_loop(source, el, escaper, "")
+    take_until_unescaped_loop(source, el, escaper, None)
     |> result.map(pair.swap)
     |> result.map_error(fn(_) { source })
   }
@@ -674,11 +675,14 @@ fn take_until_unescaped_loop(
   from: String,
   separator: String,
   esc: String,
-  acc: String,
+  acc: option.Option(String),
 ) -> Result(#(String, String), Nil) {
-  case string.split_once(from, separator) {
+  case string.split_once(from, on: separator) {
     Ok(#(head, rest)) -> {
-      let value = acc <> head
+      let value = case acc {
+        Some(s) -> s <> separator <> head
+        None -> head
+      }
       case util.count_non_overlapping(in: value, of: esc) % 2 == 0 {
         True -> Ok(#(value, rest))
         False ->
@@ -687,7 +691,7 @@ fn take_until_unescaped_loop(
             separator,
             esc,
             // Almost made the same mistake again, lmao
-            acc <> separator <> head,
+            Some(value),
           )
       }
     }
@@ -917,7 +921,7 @@ fn make_metadata_parser(
 ) -> fn(String) -> Result(#(String, String), Nil) {
   let unescape = make_unescaper(parser)
   fn(row: String) -> Result(#(String, String), Nil) {
-    case take_until_unescaped_loop(row, ":", parser.escaper, "") {
+    case take_until_unescaped_loop(row, ":", parser.escaper, None) {
       Ok(#(key, value)) -> {
         case unescape(key), unescape(value) {
           Ok(unescaped_key), Ok(unescaped_value) ->
