@@ -133,6 +133,7 @@ pub opaque type Parser(a) {
     column_separator: String,
     row_separator: String,
     escaper: String,
+    metadata_separator: String,
     expect_headers: ExpectedHeaders,
     parse: fn(List(String)) -> Result(#(a, List(String)), ParsingError),
     strict_columns: Bool,
@@ -209,6 +210,7 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
   Parser(
     column_separator: ",",
     row_separator: "\n",
+    metadata_separator: ":",
     escaper: "\"",
     expect_headers: Empty,
     parse: fn(tokens: List(String)) -> Result(
@@ -417,6 +419,15 @@ pub fn expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a) {
 /// 
 pub fn set_row_sep(parser: Parser(a), new_row_separator: String) -> Parser(a) {
   Parser(..parser, row_separator: new_row_separator)
+}
+
+/// Function to set a specific key-value metadata separator, instead of the default colon (`:`)
+/// 
+pub fn set_meta_sep(
+  parser: Parser(a),
+  new_metadata_separator: String,
+) -> Parser(a) {
+  Parser(..parser, metadata_separator: new_metadata_separator)
 }
 
 /// Function to set a specific value escaper, instead of the default doublequotes (`"`)
