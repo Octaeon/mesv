@@ -576,53 +576,60 @@ pub fn set_strict_columns(parser: Parser(a)) -> Parser(a) {
 /// Internal helper function to check whether the CSV headers that were found match
 /// the expected pattern that was specified in the Parser building process.
 /// 
-fn process_headers(
-  expected: ExpectedHeaders,
-  found: List(String),
-) -> Result(HeaderAction, ParsingError) {
-  let match = fn(passed: Bool) -> Result(HeaderAction, ParsingError) {
-    case passed {
-      True -> Ok(SkipFirstRow)
-      False -> Error(ExpectedHeadersMismatch(expected, found))
-    }
-  }
+fn make_header_processor(
+  parser: Parser(a),
+) -> fn(ExpectedHeaders, List(String)) -> Result(HeaderAction, ParsingError) {
+  let unescape = make_unescaper(parser)
+  fn(expected: ExpectedHeaders, found: List(String)) -> Result(
+    HeaderAction,
+    ParsingError,
+  ) {
+    use processed_headers <- result.try(result.all(found |> list.map(unescape)))
 
-  case expected {
-    Skip -> Ok(SkipFirstRow)
-    Empty -> Ok(ParseFirstRow)
-    InOrderExact(ordered_exact) ->
-      {
-        { list.length(ordered_exact) <= list.length(found) }
-        && list.map2(
-          ordered_exact,
-          found,
-          fn(expected_col: String, found_col: String) -> Bool {
-            expected_col == found_col
-          },
-        )
-        |> list.all(function.identity)
+    let match = fn(passed: Bool) -> Result(HeaderAction, ParsingError) {
+      case passed {
+        True -> Ok(SkipFirstRow)
+        False -> Error(ExpectedHeadersMismatch(expected, processed_headers))
       }
-      |> match()
-    HeadersMustContain(unordered_exact) ->
-      unordered_exact
-      |> list.all(list.contains(found, _))
-      |> match()
-    InOrderMustPass(ordered_custom) -> {
-      {
-        { list.length(ordered_custom) <= list.length(found) }
-        && list.map2(
-          ordered_custom,
-          found,
-          fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
-        )
-        |> list.all(function.identity)
-      }
-      |> match()
     }
-    HeadersMustContainPassing(unordered_custom) ->
-      unordered_custom
-      |> list.all(list.any(found, _))
-      |> match()
+
+    case expected {
+      Skip -> Ok(SkipFirstRow)
+      Empty -> Ok(ParseFirstRow)
+      InOrderExact(ordered_exact) ->
+        {
+          { list.length(ordered_exact) <= list.length(processed_headers) }
+          && list.map2(
+            ordered_exact,
+            processed_headers,
+            fn(expected_col: String, found_col: String) -> Bool {
+              expected_col == found_col
+            },
+          )
+          |> list.all(function.identity)
+        }
+        |> match()
+      HeadersMustContain(unordered_exact) ->
+        unordered_exact
+        |> list.all(list.contains(processed_headers, _))
+        |> match()
+      InOrderMustPass(ordered_custom) -> {
+        {
+          { list.length(ordered_custom) <= list.length(processed_headers) }
+          && list.map2(
+            ordered_custom,
+            processed_headers,
+            fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
+          )
+          |> list.all(function.identity)
+        }
+        |> match()
+      }
+      HeadersMustContainPassing(unordered_custom) ->
+        unordered_custom
+        |> list.all(list.any(processed_headers, _))
+        |> match()
+    }
   }
 }
 
@@ -836,6 +843,8 @@ pub fn preprocess(
     }
     |> read_metadata(make_metadata_parser(parser))
 
+  let process_headers = make_header_processor(parser)
+
   case stream.next(row_stream) {
     Next(stream, value) -> {
       use row_stream <- result.try(
@@ -936,7 +945,7 @@ pub fn run(
     [found_headers, ..contents] -> {
       // If the headers are the same as expected, or the user didn't care and didn't specify them, they are in this value.
       // But if they weren't as expected, this use statement means the rest of the function is not executed.
-      use header_action <- result.try(process_headers(
+      use header_action <- result.try(make_header_processor(parser)(
         parser.expect_headers,
         make_column_splitter(parser)(found_headers),
       ))
