@@ -4,6 +4,17 @@
 //// 
 //// This root module is rather barren, as most of the relevant functionality is categorized
 //// into the two modules, [`mesv/format`](mesv/format.html) and [`mesv/parse`](mesv/parse.html).
+//// 
+//// 
+//// TODO : Create an analogue of the `parse` and `format` build functions that can build both
+//// a formatter and parser at the same time.
+//// 
+//// To do so, create constant `primitives` like the ones from `gleam/json`, as well as functions
+//// that operate on those primitives. Lastly, allow users to create their own, and make a helper
+//// function in `mesv_test` that allows for easy testing of these functions, that they are their
+//// own inverses (ie, that a primitive with two functions inside of it, `fn encode(a) -> String`
+//// and `fn decode(String) -> a` satisfy the condition that `for every possible i,
+//// i = decode(encode(i))`)
 
 /// A subset of an identity function for 1-arity functions.
 /// 
