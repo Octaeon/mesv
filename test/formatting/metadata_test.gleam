@@ -171,3 +171,25 @@ pub fn default_metadata_separator_in_data_test() -> Nil {
     }
     as "Formatting default parameters | Metadata, metadata separator in CSV data"
 }
+
+pub fn default_headers_test() -> Nil {
+  let col_sep = ","
+  let row_sep = "\n"
+  let esc = "\""
+  let meta_sep = ":"
+  let formatter =
+    mesv_test.row_data_formatter(col_sep, row_sep, esc)
+    |> format.set_meta_sep(meta_sep)
+    |> format.set_headers(["Name", "Age", "Comment"])
+
+  assert {
+      formatter
+      |> format.preprocess([])
+      |> format.then(mesv_test.normal_data())
+    }
+    == {
+      formatter
+      |> format.run(mesv_test.normal_data())
+    }
+    as "Formatting default parameters | Metadata, preprocess + then == run when there's no metadata"
+}
