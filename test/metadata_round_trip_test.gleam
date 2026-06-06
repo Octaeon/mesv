@@ -4,6 +4,9 @@
 //// Formally, ensuring that if in code, `format(a) -> List(String)` and `parse(List(String)) -> a` satisfy the condition
 //// `a == parse(format(a))`, then using the `mesv.format` and `mesv.parse` modules to convert to csv and back will satisfy the condition
 //// `List(a) == mesv.parse(mesv.format(List(a)))`, no matter the specified separators and escapers.
+//// 
+//// This module is for testing this property for formatting and parsing metadata along with normal CSV data.
+//// 
 
 import gleam/list
 import gleam/result
@@ -64,7 +67,7 @@ pub fn default_normal_empty_test() -> Nil {
   let parsed = build_test_unit(",", "\n", ":", "\"")
 
   assert parsed([], mesv_test.normal_data()) == wrap(mesv_test.normal_data())
-    as "Round trip default parameters | Normal"
+    as "Round trip default parameters | Empty metadata, normal"
 }
 
 pub fn default_column_separator_empty_test() -> Nil {
@@ -76,7 +79,7 @@ pub fn default_column_separator_empty_test() -> Nil {
 
   assert parsed([], mesv_test.column_separator_data(col_sep))
     == wrap(mesv_test.column_separator_data(col_sep))
-    as "Round trip default parameters | Column separator"
+    as "Round trip default parameters | Empty metadata, column separator"
 }
 
 pub fn default_row_separator_empty_test() -> Nil {
@@ -88,7 +91,7 @@ pub fn default_row_separator_empty_test() -> Nil {
 
   assert parsed([], mesv_test.row_separator_data(row_sep))
     == wrap(mesv_test.row_separator_data(row_sep))
-    as "Round trip default parameters | Row separator"
+    as "Round trip default parameters | Empty metadata, row separator"
 }
 
 pub fn default_escaper_empty_test() -> Nil {
@@ -100,7 +103,7 @@ pub fn default_escaper_empty_test() -> Nil {
 
   assert parsed([], mesv_test.escaper_data(esc))
     == wrap(mesv_test.escaper_data(esc))
-    as "Round trip default parameters | Escaper"
+    as "Round trip default parameters | Empty metadata, escaper"
 }
 
 const single_row_metadata: List(#(String, String)) = [#("test", "metadata")]
@@ -110,7 +113,7 @@ pub fn default_normal_single_row_test() -> Nil {
 
   assert parsed(single_row_metadata, mesv_test.normal_data())
     == wrap(mesv_test.normal_data())
-    as "Round trip default parameters | Normal"
+    as "Round trip default parameters | Metadata single line, normal"
 }
 
 pub fn default_column_separator_single_row_test() -> Nil {
@@ -122,7 +125,7 @@ pub fn default_column_separator_single_row_test() -> Nil {
 
   assert parsed(single_row_metadata, mesv_test.column_separator_data(col_sep))
     == wrap(mesv_test.column_separator_data(col_sep))
-    as "Round trip default parameters | Column separator"
+    as "Round trip default parameters | Metadata single line, column separator"
 }
 
 pub fn default_row_separator_single_row_test() -> Nil {
@@ -134,7 +137,7 @@ pub fn default_row_separator_single_row_test() -> Nil {
 
   assert parsed(single_row_metadata, mesv_test.row_separator_data(row_sep))
     == wrap(mesv_test.row_separator_data(row_sep))
-    as "Round trip default parameters | Row separator"
+    as "Round trip default parameters | Metadata single line, row separator"
 }
 
 pub fn default_escaper_single_row_test() -> Nil {
@@ -146,7 +149,7 @@ pub fn default_escaper_single_row_test() -> Nil {
 
   assert parsed(single_row_metadata, mesv_test.escaper_data(esc))
     == wrap(mesv_test.escaper_data(esc))
-    as "Round trip default parameters | Escaper"
+    as "Round trip default parameters | Metadata single line, escaper"
 }
 
 const multi_row_metadata: List(#(String, String)) = [
@@ -161,7 +164,7 @@ pub fn default_normal_multi_row_test() -> Nil {
 
   assert parsed(multi_row_metadata, mesv_test.normal_data())
     == wrap(mesv_test.normal_data())
-    as "Round trip default parameters | Normal"
+    as "Round trip default parameters | Metadata multiple lines, normal"
 }
 
 pub fn default_column_separator_multi_row_test() -> Nil {
@@ -173,7 +176,7 @@ pub fn default_column_separator_multi_row_test() -> Nil {
 
   assert parsed(multi_row_metadata, mesv_test.column_separator_data(col_sep))
     == wrap(mesv_test.column_separator_data(col_sep))
-    as "Round trip default parameters | Column separator"
+    as "Round trip default parameters | Metadata multiple lines, column separator"
 }
 
 pub fn default_row_separator_multi_row_test() -> Nil {
@@ -185,7 +188,7 @@ pub fn default_row_separator_multi_row_test() -> Nil {
 
   assert parsed(multi_row_metadata, mesv_test.row_separator_data(row_sep))
     == wrap(mesv_test.row_separator_data(row_sep))
-    as "Round trip default parameters | Row separator"
+    as "Round trip default parameters | Metadata multiple lines, row separator"
 }
 
 pub fn default_escaper_multi_row_test() -> Nil {
@@ -197,5 +200,35 @@ pub fn default_escaper_multi_row_test() -> Nil {
 
   assert parsed(multi_row_metadata, mesv_test.escaper_data(esc))
     == wrap(mesv_test.escaper_data(esc))
-    as "Round trip default parameters | Escaper"
+    as "Round trip default parameters | Metadata multiple lines, escaper"
+}
+
+pub fn default_normal_empty_key_test() -> Nil {
+  let parsed = build_test_unit(",", "\n", ":", "\"")
+
+  assert parsed(
+      [#("", "oh no, my key is empty, whatever will i do")],
+      mesv_test.normal_data(),
+    )
+    == wrap(mesv_test.normal_data())
+    as "Round trip default parameters | Metadata empty key"
+}
+
+pub fn default_normal_escaped_key_test() -> Nil {
+  let parsed = build_test_unit(",", "\n", ":", "\"")
+
+  assert parsed([#(":", "you can't do that")], mesv_test.normal_data())
+    == wrap(mesv_test.normal_data())
+    as "Round trip default parameters | Metadata escaped key"
+}
+
+pub fn default_normal_escaped_value_test() -> Nil {
+  let parsed = build_test_unit(",", "\n", ":", "\"")
+
+  assert parsed(
+      [#("why not? you try", "oh sh:t, i can")],
+      mesv_test.normal_data(),
+    )
+    == wrap(mesv_test.normal_data())
+    as "Round trip default parameters | Metadata escaped value"
 }

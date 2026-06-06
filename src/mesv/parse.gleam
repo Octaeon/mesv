@@ -915,8 +915,18 @@ fn read_metadata(
 fn make_metadata_parser(
   parser: Parser(a),
 ) -> fn(String) -> Result(#(String, String), Nil) {
+  let unescape = make_unescaper(parser)
   fn(row: String) -> Result(#(String, String), Nil) {
-    take_until_unescaped_loop(row, ":", parser.escaper, "")
+    case take_until_unescaped_loop(row, ":", parser.escaper, "") {
+      Ok(#(key, value)) -> {
+        case unescape(key), unescape(value) {
+          Ok(unescaped_key), Ok(unescaped_value) ->
+            Ok(#(unescaped_key, unescaped_value))
+          _, _ -> Error(Nil)
+        }
+      }
+      Error(Nil) -> Error(Nil)
+    }
   }
 }
 
