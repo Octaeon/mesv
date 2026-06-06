@@ -344,7 +344,7 @@ pub fn preprocess(
       let metadata =
         non_empty
         |> list.map(make_metadata_formatter(formatter))
-        |> string.join(formatter.row_separator)
+        |> string.join("")
         |> wrap(in: "---" <> formatter.row_separator)
       case formatter.headers {
         Some(headers) -> {
