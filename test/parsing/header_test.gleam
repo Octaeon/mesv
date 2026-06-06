@@ -84,12 +84,12 @@ pub fn default_skip_malformed_test() -> Nil {
       <> "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
 
-  assert parsed
-    == Error(MalformedCell(
-      "and \"they're not\" even properly escaped!",
-      "Unescaped internal escapers",
-    ))
-    as "Parsing default parameters | Headers, Skip malformed header row"
+  assert parsed == Ok(mesv_test.expected_normal_data()) as
+    // I'm not yet certain whether this is the kind of behaviour I want to happen, but if the user
+    // states they want to "Skip" the first row, doesn't that imply they don't care about what's inside of it?
+    // Maybe I should rename that option to "Ignore" - that would imply parsing the first row but ignoring its'
+    // contents, not just jumping over it.
+    "Parsing default parameters | Headers, Skip malformed header row"
 }
 
 pub fn default_ordered_exact_pass_test() -> Nil {

@@ -584,19 +584,20 @@ fn make_header_processor(
     HeaderAction,
     ParsingError,
   ) {
-    use processed_headers <- result.try(result.all(found |> list.map(unescape)))
-
     let match = fn(passed: Bool) -> Result(HeaderAction, ParsingError) {
       case passed {
         True -> Ok(SkipFirstRow)
-        False -> Error(ExpectedHeadersMismatch(expected, processed_headers))
+        False -> Error(ExpectedHeadersMismatch(expected, found))
       }
     }
 
     case expected {
       Skip -> Ok(SkipFirstRow)
       Empty -> Ok(ParseFirstRow)
-      InOrderExact(ordered_exact) ->
+      InOrderExact(ordered_exact) -> {
+        use processed_headers <- result.try(result.all(
+          found |> list.map(unescape),
+        ))
         {
           { list.length(ordered_exact) <= list.length(processed_headers) }
           && list.map2(
@@ -609,26 +610,40 @@ fn make_header_processor(
           |> list.all(function.identity)
         }
         |> match()
-      HeadersMustContain(unordered_exact) ->
+      }
+      HeadersMustContain(unordered_exact) -> {
+        use processed_headers <- result.try(result.all(
+          found |> list.map(unescape),
+        ))
         unordered_exact
         |> list.all(list.contains(processed_headers, _))
         |> match()
+      }
       InOrderMustPass(ordered_custom) -> {
         {
-          { list.length(ordered_custom) <= list.length(processed_headers) }
-          && list.map2(
-            ordered_custom,
-            processed_headers,
-            fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
-          )
-          |> list.all(function.identity)
+          use processed_headers <- result.try(result.all(
+            found |> list.map(unescape),
+          ))
+          {
+            { list.length(ordered_custom) <= list.length(processed_headers) }
+            && list.map2(
+              ordered_custom,
+              processed_headers,
+              fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
+            )
+            |> list.all(function.identity)
+          }
+          |> match()
         }
-        |> match()
       }
-      HeadersMustContainPassing(unordered_custom) ->
+      HeadersMustContainPassing(unordered_custom) -> {
+        use processed_headers <- result.try(result.all(
+          found |> list.map(unescape),
+        ))
         unordered_custom
         |> list.all(list.any(processed_headers, _))
         |> match()
+      }
     }
   }
 }
