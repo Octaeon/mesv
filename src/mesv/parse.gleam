@@ -1028,7 +1028,7 @@ pub fn run(
   case make_row_splitter(parser)(source) {
     // Empty file - just return an empty list.
     [] -> []
-    contents -> {
+    [headers, ..contents] -> {
       // A locally defined function capturing the parser data, that is used for processing each row
       let process_row = fn(cells: List(String)) -> Result(a, DataRowError(e)) {
         cells
@@ -1054,13 +1054,11 @@ pub fn run(
         })
       }
 
-      // At this point, the `Ok` output is guaranteed, even if parsing of every single row
-      // fails, and the `List(a)` is empty.
-      // So just map over the `List(String)` of rows and try to parse each of them,
-      // and then partition the `List(Result(a, ParsingError))` into `#(List(a), List(ParsingError))`
+      let contents = case parser.expect_headers {
+        Ignore -> contents
+        _ -> [headers, ..contents]
+      }
 
-      // A hacky solution to append the first line to the contents if the `process_headers`
-      // function returned decided that we should parse the first row.
       contents
       |> list.map(fn(row_string) {
         // All of the parsing functions are condensed here to avoid having to map multiple times.
