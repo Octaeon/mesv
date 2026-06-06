@@ -1,4 +1,4 @@
-import mesv/parse.{DataMismatchedEscapers, DataUnescapedEscapers, Text}
+import mesv/parse.{DataNonDuplicatedEscapers, DataUnescapedEscapers, Text}
 import mesv_test
 
 pub fn default_normal_test() -> Nil {
@@ -41,7 +41,7 @@ pub fn bad_escapers_test() -> Nil {
   assert parsed
     == [
       Error(DataUnescapedEscapers("Likes to \"mess\" with parsers")),
-      Error(DataMismatchedEscapers(
+      Error(DataNonDuplicatedEscapers(
         "\"Doesn't understand that \"\"\"internal escapers\"\"\" should be duplicated, not triplicated\"",
       )),
     ]
