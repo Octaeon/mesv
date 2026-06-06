@@ -94,8 +94,6 @@
 //// 
 
 import gleam/function
-import gleam/int
-import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/pair
@@ -104,17 +102,49 @@ import gleam/string
 import mesv/stream.{type Stream, Done, Next}
 import mesv/util
 
-/// An error type representing any kind of error encountered when parsing.
+/// Error type returned by the [`parse.preprocess`](parse.html#preprocess) function,
+/// representing the outcomes that could've caused preprocessing the file to fail.
 /// 
-/// In the future, a better `Error` type and error handling will be implemented,
-/// but it should do its' job for now.
-/// 
-pub type ParsingError {
-  CantParseRow(index: Int, contents: String, reason: String)
-  ExpectedHeadersMismatch(expected: ExpectedHeaders, found: List(String))
-  RanOutOfValues
-  StrictParsedWithLeftovers(leftovers: List(String))
-  MalformedCell(element: String, description: String)
+pub type PreprocessingError {
+  /// Any one of the metadata fields couldn't be processed. The `rows` field inside this
+  /// variant will never be empty, since if it were, this error would not be returned.
+  /// 
+  MetadataParsing(rows: List(MetadataRowError))
+  /// The headers found in the first row of data after the metadata was finished did not
+  /// match the expected headers passed to the Parser.
+  /// 
+  /// The first field of this variant, `found_headers` stores the cells of the first
+  /// row that were found, in order.
+  /// 
+  /// The second field, `results`, stores the results of matching each of the successive
+  /// headers to expected.
+  /// 
+  /// If the `ExpectedHeaders` type passed to the parser was `InOrderExact` or `InOrderMustPass`,
+  /// then if a header matched or passed the check, then at its' index will be `Ok(i)` where
+  /// `i` is its' index, so it can be ignored. However, if the `ExpectedHeaders` was
+  /// `HeadersMustContain` or `HeadersMustContainPassing`, then an `Ok(i)` will be returned if
+  /// a header matched or passed, and `i` will be the index of the check it passed or value
+  /// it equaled.
+  /// 
+  HeadersMismatch(found_headers: List(String), results: List(Result(Int, Nil)))
+  FailedHeaderParsing(reason: DataRowError(Nil))
+  SourceEmpty
+}
+
+pub type MetadataRowError {
+  NoSeparator(row: String)
+  UnescapedSeparators(field: String)
+  MetadataUnescapedEscapers(field: String)
+  MetadataNonDuplicatedEscapers(field: String)
+}
+
+pub type DataRowError(a) {
+  NotEnoughCells
+  TooManyCells(leftovers: List(String))
+  DataUnescapedEscapers(field: String)
+  DataMismatchedEscapers(field: String)
+  DataNonDuplicatedEscapers(field: String)
+  CellParsingFailed(cell: String, reason: a)
 }
 
 /// The type describing how to create a value of type `a` from a String.
@@ -124,19 +154,19 @@ pub type ParsingError {
 /// the specific behaviour, and the [`parse.column`](parse.html#column) function to specify how
 /// each subsequent column should be parsed.
 /// 
-/// Once you have the desired `Parser(a)`, use the [`parse.run`](parse.html#run) function to
+/// Once you have the desired `Parser(a, e)`, use the [`parse.run`](parse.html#run) function to
 /// convert a `String` into a `List(Result(a, ParsingError))`, and check out the
 /// [`parse.get_parsed`](parse.html#get_parsed) function to easily extract the succesfully parsed
 /// rows. 
 /// 
-pub opaque type Parser(a) {
+pub opaque type Parser(a, b) {
   Parser(
     column_separator: String,
     row_separator: String,
     escaper: String,
     metadata_separator: String,
     expect_headers: ExpectedHeaders,
-    parse: fn(List(String)) -> Result(#(a, List(String)), ParsingError),
+    parse: fn(List(String)) -> Result(#(a, List(String)), DataRowError(b)),
     strict_columns: Bool,
     trim_whitespace: #(Bool, Bool),
   )
@@ -152,7 +182,8 @@ pub type CsvSource {
 /// Not certain it is the final version yet.
 /// 
 pub type ExpectedHeaders {
-  Skip
+  /// Ignore the contents of the first row, 
+  Ignore
   // Doesn't matter what the first row is, just skip it
   Empty
   // Expect the file to start with the data 
@@ -207,7 +238,7 @@ pub type HeaderAction {
 /// and to parse the arguments to construct the result, again, use the
 /// [`parse.column`](parse.html#column) function.
 /// 
-pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
+pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b, e) {
   Parser(
     column_separator: ",",
     row_separator: "\n",
@@ -216,7 +247,7 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
     expect_headers: Empty,
     parse: fn(tokens: List(String)) -> Result(
       #(fn(a) -> b, List(String)),
-      ParsingError,
+      DataRowError(e),
     ) {
       Ok(#(f, tokens))
     },
@@ -225,41 +256,40 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b) {
   )
 }
 
-fn describe_error(err: ParsingError) -> String {
-  case err {
-    CantParseRow(index, contents, reason) ->
-      "Can't parse row #"
-      <> int.to_string(index)
-      <> " due to [ "
-      <> reason
-      <> " ]\n"
-      <> "contents: [ "
-      <> contents
-      <> " ]"
-    ExpectedHeadersMismatch(expected, found) ->
-      "Expected "
-      <> describe_expected_headers(expected)
-      <> ", found [ "
-      <> string.join(found, ", ")
-      <> " ]"
-    RanOutOfValues -> "Ran out of values"
-    StrictParsedWithLeftovers(leftovers) ->
-      "Encountered leftovers: [ " <> string.join(leftovers, ", ") <> " ]"
-    MalformedCell(element, description) ->
-      "Malformed cell: [ " <> element <> " ], because " <> description
-  }
-}
-
-fn describe_expected_headers(headers: ExpectedHeaders) -> String {
-  case headers {
-    Skip -> "Skip"
-    Empty -> "no headers"
-    InOrderExact(l) -> "Exactly [ " <> string.join(l, ", ") <> " ]"
-    HeadersMustContain(l) -> "Containing [ " <> string.join(l, ", ") <> " ]"
-    InOrderMustPass(_) -> "Ordered functions"
-    HeadersMustContainPassing(_) -> "Unordered functions"
-  }
-}
+// fn describe_error(err: ParsingError) -> String {
+//   case err {
+//     CantParseRow(index, contents, reason) ->
+//       "Can't parse row #"
+//       <> int.to_string(index)
+//       <> " due to [ "
+//       <> reason
+//       <> " ]\n"
+//       <> "contents: [ "
+//       <> contents
+//       <> " ]"
+//     ExpectedHeadersMismatch(expected, found) ->
+//       "Expected "
+//       <> describe_expected_headers(expected)
+//       <> ", found [ "
+//       <> string.join(found, ", ")
+//       <> " ]"
+//     RanOutOfValues -> "Ran out of values"
+//     StrictParsedWithLeftovers(leftovers) ->
+//       "Encountered leftovers: [ " <> string.join(leftovers, ", ") <> " ]"
+//     MalformedCell(element, description) ->
+//       "Malformed cell: [ " <> element <> " ], because " <> description
+//   }
+// }
+// fn describe_expected_headers(headers: ExpectedHeaders) -> String {
+//   case headers {
+//     Skip -> "Skip"
+//     Empty -> "no headers"
+//     InOrderExact(l) -> "Exactly [ " <> string.join(l, ", ") <> " ]"
+//     HeadersMustContain(l) -> "Containing [ " <> string.join(l, ", ") <> " ]"
+//     InOrderMustPass(_) -> "Ordered functions"
+//     HeadersMustContainPassing(_) -> "Unordered functions"
+//   }
+// }
 
 /// Transform a `Parser`, by passing in a parsing function for a specified column.
 /// 
@@ -274,31 +304,32 @@ fn describe_expected_headers(headers: ExpectedHeaders) -> String {
 /// // Parser(fn(String) -> a)
 /// parser
 ///   |> parse.column(Ok)
-///   // Parser(a)
+///   // Parser(a, e)
 /// ```
 /// 
 pub fn column(
-  parser: Parser(fn(a) -> b),
-  parse: fn(String) -> Result(a, Nil),
-) -> Parser(b) {
-  Parser(..parser, parse: fn(tokens: List(String)) {
+  parser: Parser(fn(a) -> b, e),
+  parse: fn(String) -> Result(a, e),
+) -> Parser(b, e) {
+  Parser(..parser, parse: fn(tokens: List(String)) -> Result(
+    #(b, List(String)),
+    DataRowError(e),
+  ) {
     use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
 
     // This case ends up being run when the parser is running.
     // So, if the list ends up empty, that means that one row has too few elements
     // to build the expected data type.
     case remaining_tokens {
-      [token, ..rest] ->
+      [cell, ..rest] ->
         // TODO: Should I process the elements here, or no? I'm not sure
-        token
+        cell
         |> parse()
-        |> result.map_error(fn(_) {
-          CantParseRow(-1, token, "idk, think of a better error system.")
-        })
+        |> result.map_error(fn(e) { CellParsingFailed(cell, e) })
         |> result.map(constructor)
         |> result.map(fn(b) { #(b, rest) })
 
-      [] -> Error(RanOutOfValues)
+      [] -> Error(NotEnoughCells)
     }
   })
 }
@@ -306,9 +337,9 @@ pub fn column(
 /// Documentation to be build :|
 /// 
 pub fn set_expected_headers(
-  parser: Parser(a),
+  parser: Parser(a, e),
   headers: ExpectedHeaders,
-) -> Parser(a) {
+) -> Parser(a, e) {
   Parser(..parser, expect_headers: headers)
 }
 
@@ -351,7 +382,7 @@ pub fn transform_headers(
   transform fun: fn(String) -> String,
 ) -> ExpectedHeaders {
   case headers {
-    Skip -> Skip
+    Ignore -> Ignore
     Empty -> Empty
     InOrderExact(headers) ->
       InOrderMustPass(
@@ -395,7 +426,10 @@ pub fn transform_headers(
 A new function, set_expected_headers was created, with extended functionality and more documentation.
 For new code, use that one.
 ")
-pub fn expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a) {
+pub fn expect_headers(
+  parser: Parser(a, e),
+  headers: List(String),
+) -> Parser(a, e) {
   Parser(..parser, expect_headers: InOrderExact(headers))
 }
 
@@ -418,16 +452,19 @@ pub fn expect_headers(parser: Parser(a), headers: List(String)) -> Parser(a) {
 ///   // -> parse returns [#("a", 1, "c"), #("d", 4, "a")]
 /// ```
 /// 
-pub fn set_row_sep(parser: Parser(a), new_row_separator: String) -> Parser(a) {
+pub fn set_row_sep(
+  parser: Parser(a, e),
+  new_row_separator: String,
+) -> Parser(a, e) {
   Parser(..parser, row_separator: new_row_separator)
 }
 
 /// Function to set a specific key-value metadata separator, instead of the default colon (`:`)
 /// 
 pub fn set_meta_sep(
-  parser: Parser(a),
+  parser: Parser(a, e),
   new_metadata_separator: String,
-) -> Parser(a) {
+) -> Parser(a, e) {
   Parser(..parser, metadata_separator: new_metadata_separator)
 }
 
@@ -463,7 +500,7 @@ pub fn set_meta_sep(
 ///   // -> row returns Ok(#("a", "\"b\"", "\"c\"\"\""))
 /// ```
 /// 
-pub fn set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a) {
+pub fn set_escaper(parser: Parser(a, e), new_escaper: String) -> Parser(a, e) {
   Parser(..parser, escaper: new_escaper)
 }
 
@@ -530,10 +567,10 @@ pub fn set_escaper(parser: Parser(a), new_escaper: String) -> Parser(a) {
 /// ```
 /// 
 pub fn set_trim_whitespace(
-  parser: Parser(a),
+  parser: Parser(a, e),
   start trim_start: Bool,
   end trim_end: Bool,
-) -> Parser(a) {
+) -> Parser(a, e) {
   Parser(..parser, trim_whitespace: #(trim_start, trim_end))
 }
 
@@ -556,9 +593,9 @@ pub fn set_trim_whitespace(
 /// ```
 /// 
 pub fn set_col_sep(
-  parser: Parser(a),
+  parser: Parser(a, e),
   new_column_separator: String,
-) -> Parser(a) {
+) -> Parser(a, e) {
   Parser(..parser, column_separator: new_column_separator)
 }
 
@@ -581,7 +618,7 @@ pub fn set_col_sep(
 ///   // -> row returns Error(StrictParsedWithLeftovers(["c"]))
 /// ```
 /// 
-pub fn set_strict_columns(parser: Parser(a)) -> Parser(a) {
+pub fn set_strict_columns(parser: Parser(a, e)) -> Parser(a, e) {
   Parser(..parser, strict_columns: True)
 }
 
@@ -589,73 +626,188 @@ pub fn set_strict_columns(parser: Parser(a)) -> Parser(a) {
 /// the expected pattern that was specified in the Parser building process.
 /// 
 fn make_header_processor(
-  parser: Parser(a),
-) -> fn(ExpectedHeaders, List(String)) -> Result(HeaderAction, ParsingError) {
-  let unescape = make_unescaper(parser)
+  parser: Parser(a, e),
+) -> fn(ExpectedHeaders, List(String)) ->
+  Result(HeaderAction, PreprocessingError) {
+  let unescape = fn(cell) {
+    make_unescaper(parser)(cell)
+    |> result.map_error(fn(err) {
+      FailedHeaderParsing(case err {
+        CellParsingFailed(cell, _) -> CellParsingFailed(cell, Nil)
+        NotEnoughCells -> NotEnoughCells
+        TooManyCells(leftovers) -> TooManyCells(leftovers)
+        DataUnescapedEscapers(field) -> DataUnescapedEscapers(field)
+        DataMismatchedEscapers(field) -> DataMismatchedEscapers(field)
+        DataNonDuplicatedEscapers(field) -> DataNonDuplicatedEscapers(field)
+      })
+    })
+  }
+
   fn(expected: ExpectedHeaders, found: List(String)) -> Result(
     HeaderAction,
-    ParsingError,
+    PreprocessingError,
   ) {
-    let match = fn(passed: Bool) -> Result(HeaderAction, ParsingError) {
-      case passed {
-        True -> Ok(SkipFirstRow)
-        False -> Error(ExpectedHeadersMismatch(expected, found))
+    // First unescape all headers. If the header row has an incorrect format, even if the
+    // user selected to skip it, the parsing will return an error.
+    use processed_headers <- result.try(result.all(found |> list.map(unescape)))
+
+    // Based on the length of the requirements and the found headers,
+    // decide whether to proceed or return a PreprocessingError.
+    let length_guard = fn(req: List(f)) -> Result(List(f), PreprocessingError) {
+      let requirements = list.length(req)
+      let headers = list.length(processed_headers)
+      case requirements <= headers, headers <= requirements {
+        False, _ -> Error(FailedHeaderParsing(NotEnoughCells))
+        True, True -> Ok(req)
+        True, False if parser.strict_columns -> {
+          Error(FailedHeaderParsing(TooManyCells(processed_headers)))
+        }
+        True, False -> Ok(req)
       }
     }
 
     case expected {
-      Skip -> Ok(SkipFirstRow)
+      Ignore -> Ok(SkipFirstRow)
       Empty -> Ok(ParseFirstRow)
-      InOrderExact(ordered_exact) -> {
-        use processed_headers <- result.try(result.all(
-          found |> list.map(unescape),
-        ))
-        {
-          { list.length(ordered_exact) <= list.length(processed_headers) }
-          && list.map2(
-            ordered_exact,
-            processed_headers,
-            fn(expected_col: String, found_col: String) -> Bool {
-              expected_col == found_col
-            },
-          )
-          |> list.all(function.identity)
-        }
-        |> match()
-      }
-      HeadersMustContain(unordered_exact) -> {
-        use processed_headers <- result.try(result.all(
-          found |> list.map(unescape),
-        ))
-        unordered_exact
-        |> list.all(list.contains(processed_headers, _))
-        |> match()
-      }
-      InOrderMustPass(ordered_custom) -> {
-        {
-          use processed_headers <- result.try(result.all(
-            found |> list.map(unescape),
-          ))
-          {
-            { list.length(ordered_custom) <= list.length(processed_headers) }
-            && list.map2(
-              ordered_custom,
+      InOrderExact(ordered_exact) ->
+        ordered_exact
+        |> length_guard()
+        |> result.try(fn(required_headers: List(String)) {
+          let matching =
+            list.map2(
+              required_headers,
               processed_headers,
-              fn(fun: fn(String) -> Bool, val: String) -> Bool { fun(val) },
+              fn(expected_col: String, found_col: String) -> Bool {
+                expected_col == found_col
+              },
             )
-            |> list.all(function.identity)
+
+          case list.all(matching, function.identity) {
+            True -> Ok(SkipFirstRow)
+            False ->
+              Error(HeadersMismatch(
+                processed_headers,
+                matching
+                  |> list.index_map(fn(passed, index) {
+                    case passed {
+                      True -> Ok(index)
+                      False -> Error(Nil)
+                    }
+                  }),
+              ))
           }
-          |> match()
-        }
-      }
-      HeadersMustContainPassing(unordered_custom) -> {
-        use processed_headers <- result.try(result.all(
-          found |> list.map(unescape),
-        ))
+        })
+
+      HeadersMustContain(unordered_exact) ->
+        unordered_exact
+        |> length_guard()
+        |> result.try(fn(requirements: List(String)) {
+          // TODO : As of right now, this implementation only checks whether each header passes
+          // one requirement, not that each requirement has its' own unique header that passed it.
+          // What this means is, if a requirement that happens to be earlier has two headers that
+          // match, and takes the first, and a requirement later on only has one header that was already
+          // taken, it would cause an error, even though it should've been fine.
+
+          // This is not relevant at all yet, and there aren't any tests for this, but it is something
+          // I felt the need to note.
+          let headers_matching_map =
+            requirements
+            |> list.map(fn(req) {
+              // For each requirement, check all headers to see if they match
+              list.map(processed_headers, fn(el) { el == req })
+            })
+            // turn the list of requirements' headers that pass to a list of
+            // headers' requirements that they pass
+            |> list.transpose()
+            // For each of the found headers, get the index of the first requirement it satisfies,
+            // or if it doesn't satisfy any, `Error(Nil)`.
+            |> list.map(fn(header_passing_reqs) {
+              header_passing_reqs
+              |> list.index_map(fn(passed_req, index) { #(index, passed_req) })
+              |> list.find_map(fn(first_passing_req) {
+                case first_passing_req.1 {
+                  True -> Ok(first_passing_req.0)
+                  False -> Error(Nil)
+                }
+              })
+            })
+
+          case result.all(headers_matching_map) {
+            Ok(_) -> Ok(SkipFirstRow)
+            Error(_) ->
+              Error(HeadersMismatch(processed_headers, headers_matching_map))
+          }
+        })
+
+      InOrderMustPass(ordered_custom) ->
+        ordered_custom
+        |> length_guard()
+        |> result.try(fn(required_headers: List(fn(String) -> Bool)) {
+          let matching =
+            list.map2(
+              required_headers,
+              processed_headers,
+              fn(must_pass: fn(String) -> Bool, found_col: String) -> Bool {
+                must_pass(found_col)
+              },
+            )
+
+          case list.all(matching, function.identity) {
+            True -> Ok(SkipFirstRow)
+            False ->
+              Error(HeadersMismatch(
+                processed_headers,
+                matching
+                  |> list.index_map(fn(passed, index) {
+                    case passed {
+                      True -> Ok(index)
+                      False -> Error(Nil)
+                    }
+                  }),
+              ))
+          }
+        })
+
+      HeadersMustContainPassing(unordered_custom) ->
         unordered_custom
-        |> list.all(list.any(processed_headers, _))
-        |> match()
-      }
+        |> length_guard()
+        |> result.try(fn(requirements: List(fn(String) -> Bool)) {
+          // TODO : As of right now, this implementation only checks whether each header passes
+          // one requirement, not that each requirement has its' own unique header that passed it.
+          // What this means is, if a requirement that happens to be earlier has two headers that
+          // match, and takes the first, and a requirement later on only has one header that was already
+          // taken, it would cause an error, even though it should've been fine.
+
+          // This is not relevant at all yet, and there aren't any tests for this, but it is something
+          // I felt the need to note.
+          let headers_matching_map =
+            requirements
+            |> list.map(fn(req) {
+              // For each requirement, check all headers to see if they satisfy the requirement
+              list.map(processed_headers, fn(el) { req(el) })
+            })
+            // turn the list of requirements' headers that pass to a list of
+            // headers' requirements that they pass
+            |> list.transpose()
+            // For each of the found headers, get the index of the first requirement it satisfies,
+            // or if it doesn't satisfy any, `Error(Nil)`.
+            |> list.map(fn(header_passing_reqs) {
+              header_passing_reqs
+              |> list.index_map(fn(passed_req, index) { #(index, passed_req) })
+              |> list.find_map(fn(first_passing_req) {
+                case first_passing_req.1 {
+                  True -> Ok(first_passing_req.0)
+                  False -> Error(Nil)
+                }
+              })
+            })
+
+          case result.all(headers_matching_map) {
+            Ok(_) -> Ok(SkipFirstRow)
+            Error(_) ->
+              Error(HeadersMismatch(processed_headers, headers_matching_map))
+          }
+        })
     }
   }
 }
@@ -699,7 +851,7 @@ fn take_until_unescaped_loop(
   }
 }
 
-fn make_row_stream(parser: Parser(a)) -> fn(String) -> Stream(String) {
+fn make_row_stream(parser: Parser(a, e)) -> fn(String) -> Stream(String) {
   fn(source: String) -> Stream(String) {
     stream.from_divider(
       source,
@@ -710,7 +862,7 @@ fn make_row_stream(parser: Parser(a)) -> fn(String) -> Stream(String) {
 
 /// Internal function for creating a row splitting function directly from a `Parser`.
 /// 
-fn make_row_splitter(parser: Parser(a)) -> fn(CsvSource) -> List(String) {
+fn make_row_splitter(parser: Parser(a, e)) -> fn(CsvSource) -> List(String) {
   fn(source: CsvSource) -> List(String) {
     case source {
       Text(str) ->
@@ -726,7 +878,7 @@ fn make_row_splitter(parser: Parser(a)) -> fn(CsvSource) -> List(String) {
 
 /// Internal function for creating a column splitting function directly from a `Parser`.
 /// 
-fn make_column_splitter(parser: Parser(a)) -> fn(String) -> List(String) {
+fn make_column_splitter(parser: Parser(a, e)) -> fn(String) -> List(String) {
   util.split_on_unescaped(
     separator: parser.column_separator,
     not_in: parser.escaper,
@@ -735,7 +887,7 @@ fn make_column_splitter(parser: Parser(a)) -> fn(String) -> List(String) {
 
 /// Internal function for creating a trimming function directly from a `Parser`.
 /// 
-fn make_content_trimmer(parser: Parser(a)) -> fn(String) -> String {
+fn make_content_trimmer(parser: Parser(a, e)) -> fn(String) -> String {
   let #(trim_start, trim_end) = parser.trim_whitespace
   fn(element: String) -> String {
     element
@@ -753,8 +905,8 @@ fn make_content_trimmer(parser: Parser(a)) -> fn(String) -> String {
 /// Internal function for creating an unescaping function directly from a `Parser`.
 /// 
 fn make_unescaper(
-  parser: Parser(a),
-) -> fn(String) -> Result(String, ParsingError) {
+  parser: Parser(a, e),
+) -> fn(String) -> Result(String, DataRowError(e)) {
   let escaper = parser.escaper
   // Unescape the String - for now, just deduplicate the escaper characters
   // (According to the CSV format standard, if any doubleQuotes appear inside a cell,
@@ -784,7 +936,7 @@ fn make_unescaper(
   // This might be overkill. Maybe instead of insisting on doing things with functional patterns
   // I should bite the bullet and do things like this by just consuming the String one character
   // at a time with a state machine implemented with recursive functions.
-  fn(cell: String) -> Result(String, ParsingError) {
+  fn(cell: String) -> Result(String, DataRowError(e)) {
     // First trim the whitespace from the cell, so if the CSV String was modified (such as aligning the columns)
     // it will not affect this program from correctly unescaping cells.
     let trimmed = string.trim(cell)
@@ -793,22 +945,21 @@ fn make_unescaper(
 
     // Check if the number of escapers in the cell is even
     case num_single, starts(trimmed), ends(trimmed) {
-      n, _, _ if n % 2 != 0 ->
-        Error(MalformedCell(cell, "Odd number of escapers"))
       n, True, True if n % 2 == 0 && n == num_duplicated * 2 ->
         // If it was even and wrapped in escapers, remove them along with the whitespace wrapping the cell
         Ok(deduplicate(trimmed))
       n, False, False if n == 0 && num_duplicated == 0 -> Ok(cell)
-      n, False, False if n != 0 ->
-        Error(MalformedCell(cell, "Unescaped internal escapers"))
+      _, a, b if a != b -> Error(DataMismatchedEscapers(trimmed))
+      n, False, False if n != 0 -> Error(DataUnescapedEscapers(trimmed))
+      n, _, _ if n % 2 != 0 -> Error(DataMismatchedEscapers(trimmed))
       n, _, _ if n != num_duplicated * 2 ->
         // If the cell starts with an escaper but does not end in one, then something went wrong,
         // and we are returning an error.
-        Error(MalformedCell(cell, "Wrongly duplicated internal escapers"))
+        Error(DataNonDuplicatedEscapers(trimmed))
       _, _, _ ->
         // If the cell starts with an escaper but does not end in one, then something went wrong,
         // and we are returning an error.
-        Error(MalformedCell(cell, "Mismatched escapers"))
+        Error(DataMismatchedEscapers(trimmed))
     }
   }
 }
@@ -817,19 +968,19 @@ fn make_unescaper(
 /// value along with the leftover tokens, and returns a `Result(a, ParsingError)`.
 /// 
 fn make_finalizer(
-  parser: Parser(a),
-) -> fn(#(a, List(String))) -> Result(a, ParsingError) {
+  parser: Parser(a, e),
+) -> fn(#(a, List(String))) -> Result(a, DataRowError(e)) {
   case parser.strict_columns {
-    True -> fn(output: #(a, List(String))) -> Result(a, ParsingError) {
+    True -> fn(output: #(a, List(String))) -> Result(a, DataRowError(e)) {
       let #(value, leftovers) = output
       case leftovers {
         // Strict columns and no leftovers, proceed
         [] -> Ok(value)
         // Strict columns and found leftovers, Error
-        _ -> Error(StrictParsedWithLeftovers(leftovers))
+        _ -> Error(TooManyCells(leftovers))
       }
     }
-    False -> fn(output: #(a, List(String))) -> Result(a, ParsingError) {
+    False -> fn(output: #(a, List(String))) -> Result(a, DataRowError(e)) {
       // Just ignore the leftovers
       Ok(output.0)
     }
@@ -843,12 +994,12 @@ fn make_finalizer(
 /// ### Return explanation
 /// Returns a `Result`:
 /// - `Error(String)` if the headers didn't match
-/// - `Ok(#(List(#(String, String)), Parser(a), String))` if the headers did match.
+/// - `Ok(#(List(#(String, String)), Parser(a, e), String))` if the headers did match.
 /// 
 /// In the case of an `Ok`, the values are like so:
 /// - The first `List(#(String, String))` is the list of metadata at the beginning. Right now,
 ///   if the user wants to do something with it, they must do so manually.
-/// - Second element `Parser(a)` - a modified parser to use when calling the
+/// - Second element `Parser(a, e)` - a modified parser to use when calling the
 ///   [`parse.run`](parse.html#run) function later - it will expect that the first row
 ///   is the first data point, and will behave accordingly.
 /// - The third element `String` is the contents of the CSV file with the metadata and header
@@ -863,9 +1014,12 @@ fn make_finalizer(
 /// Read more about this on the [MESV grammar](mesv-grammar.html) page.
 /// 
 pub fn preprocess(
-  parser: Parser(a),
+  parser: Parser(a, e),
   source: CsvSource,
-) -> Result(#(List(#(String, String)), Parser(a), CsvSource), Nil) {
+) -> Result(
+  #(List(#(String, String)), Parser(a, e), CsvSource),
+  PreprocessingError,
+) {
   let #(row_stream, metadata) =
     case source {
       Text(str) -> make_row_stream(parser)(str)
@@ -886,17 +1040,14 @@ pub fn preprocess(
         {
           Ok(SkipFirstRow) -> Ok(stream)
           Ok(ParseFirstRow) -> Ok(stream.prepend(stream, value))
-          Error(err) -> {
-            io.println_error(describe_error(err))
-            Error(Nil)
-          }
+          Error(err) -> Error(err)
         },
       )
       let parser = parser |> set_expected_headers(Empty)
       let data = row_stream |> RowStream
       Ok(#(metadata, parser, data))
     }
-    Done -> Error(Nil)
+    Done -> Error(SourceEmpty)
   }
 }
 
@@ -917,7 +1068,7 @@ fn read_metadata(
 }
 
 fn make_metadata_parser(
-  parser: Parser(a),
+  parser: Parser(a, e),
 ) -> fn(String) -> Result(#(String, String), Nil) {
   let unescape = make_unescaper(parser)
   fn(row: String) -> Result(#(String, String), Nil) {
@@ -934,7 +1085,7 @@ fn make_metadata_parser(
   }
 }
 
-/// Function to use the specified `Parser(a)` to transform the `source` into a
+/// Function to use the specified `Parser(a, e)` to transform the `source` into a
 /// `Result(List(Result(a, ParsingError)))`.
 /// 
 /// If the headers specified in the [`parse.set_expected_headers`](parse.html#set_expected_headers)
@@ -976,22 +1127,15 @@ fn make_metadata_parser(
 /// 4. Return a `List(Result(a, ParsingError))` and wrap it in `Ok`
 /// 
 pub fn run(
-  parser: Parser(a),
+  parser: Parser(a, e),
   source: CsvSource,
-) -> Result(List(Result(a, ParsingError)), ParsingError) {
+) -> List(Result(a, DataRowError(e))) {
   case make_row_splitter(parser)(source) {
     // Empty file - just return an empty list.
-    [] -> Ok([])
-    [found_headers, ..contents] -> {
-      // If the headers are the same as expected, or the user didn't care and didn't specify them, they are in this value.
-      // But if they weren't as expected, this use statement means the rest of the function is not executed.
-      use header_action <- result.try(make_header_processor(parser)(
-        parser.expect_headers,
-        make_column_splitter(parser)(found_headers),
-      ))
-
+    [] -> []
+    [headers, ..contents] -> {
       // A locally defined function capturing the parser data, that is used for processing each row
-      let process_row = fn(cells: List(String)) -> Result(a, ParsingError) {
+      let process_row = fn(cells: List(String)) -> Result(a, DataRowError(e)) {
         cells
         // Unescape the String - ie, if the escape characters are present both at the beginning
         // and end of the String, remove them, and deduplicate any internal escapers.
@@ -999,7 +1143,7 @@ pub fn run(
         |> list.map(make_unescaper(parser))
         // Only proceed if all cells in this row are unwrapped
         |> result.all()
-        |> result.try(fn(elements: List(String)) -> Result(a, ParsingError) {
+        |> result.try(fn(elements: List(String)) -> Result(a, DataRowError(e)) {
           elements
           // Trim white space according to the rules set.
           // By this point, the string is unwrapped and unescaped, so what to do with it
@@ -1015,24 +1159,18 @@ pub fn run(
         })
       }
 
-      // At this point, the `Ok` output is guaranteed, even if parsing of every single row
-      // fails, and the `List(a)` is empty.
-      // So just map over the `List(String)` of rows and try to parse each of them,
-      // and then partition the `List(Result(a, ParsingError))` into `#(List(a), List(ParsingError))`
-      Ok(
-        // A hacky solution to append the first line to the contents if the `process_headers`
-        // function returned decided that we should parse the first row.
-        case header_action {
-          ParseFirstRow -> [found_headers, ..contents]
-          SkipFirstRow -> contents
-        }
-        |> list.map(fn(row_string) {
-          // All of the parsing functions are condensed here to avoid having to map multiple times.
-          row_string
-          |> make_column_splitter(parser)
-          |> process_row()
-        }),
-      )
+      let contents = case parser.expect_headers {
+        Ignore -> contents
+        _ -> [headers, ..contents]
+      }
+
+      contents
+      |> list.map(fn(row_string) {
+        // All of the parsing functions are condensed here to avoid having to map multiple times.
+        row_string
+        |> make_column_splitter(parser)
+        |> process_row()
+      })
     }
   }
 }
@@ -1040,7 +1178,7 @@ pub fn run(
 /// > **This function is deprecated, and should be replaced with the
 ///   [`parse.run`](parse.html#run) function.**
 /// 
-/// Function to use the specified `Parser(a)` to transform the source into a `#(List(a),
+/// Function to use the specified `Parser(a, e)` to transform the source into a `#(List(a),
 /// List(ParsingError))`.
 /// 
 /// To follow the expected previous behaviour, it returns a `Result(#(List(a),
@@ -1053,12 +1191,14 @@ function to `run`. This function is still available to call, but should be repla
 In new code, use the `run` function.
 ")
 pub fn parse(
-  parser: Parser(a),
+  parser: Parser(a, e),
   source: String,
-) -> Result(#(List(a), List(ParsingError)), ParsingError) {
-  run(parser, Text(source))
-  |> result.map(fn(rows) {
-    rows
+) -> Result(#(List(a), List(DataRowError(e))), PreprocessingError) {
+  preprocess(parser, Text(source))
+  |> result.map(fn(preprocess_out) {
+    // Using this function means ignoring the parsed metadata
+    let #(_metadata, parser, csv_source) = preprocess_out
+    run(parser, csv_source)
     |> result.partition
     |> pair.map_first(list.reverse)
     |> pair.map_second(list.reverse)
@@ -1087,12 +1227,31 @@ pub fn parse(
 /// Of course, this is all under the assumption that the parsing succeeded initially
 /// and started execution.
 /// 
-pub fn get_parsed(rows: List(Result(a, ParsingError))) -> List(a) {
-  rows
-  |> list.filter_map(fn(val: Result(a, ParsingError)) -> Result(a, Nil) {
-    case val {
-      Ok(parsed_val) -> Ok(parsed_val)
-      Error(_) -> Error(Nil)
-    }
+pub fn get_parsed(rows: List(Result(a, DataRowError(e)))) -> List(a) {
+  rows |> list.filter_map(function.identity)
+}
+
+pub fn then(
+  preprocessed: Result(
+    #(List(#(String, String)), Parser(a, e), CsvSource),
+    PreprocessingError,
+  ),
+) -> Result(
+  #(List(#(String, String)), List(Result(a, DataRowError(e)))),
+  PreprocessingError,
+) {
+  preprocessed
+  |> result.map(fn(a) {
+    let #(metadata, parser, csv_source) = a
+    #(metadata, run(parser, csv_source))
   })
+}
+
+pub fn just_data(
+  processed: Result(
+    #(List(#(String, String)), List(Result(a, DataRowError(e)))),
+    PreprocessingError,
+  ),
+) -> Result(List(Result(a, DataRowError(e))), PreprocessingError) {
+  result.map(processed, pair.second)
 }

@@ -11,7 +11,9 @@
 import gleam/list
 import gleam/result
 import mesv/format.{type Formatter}
-import mesv/parse.{type Parser, type ParsingError, RanOutOfValues, Text}
+import mesv/parse.{
+  type DataRowError, type Parser, type PreprocessingError, InOrderExact, Text,
+}
 import mesv_test.{type RowData}
 
 fn build_test_unit_parser_and_formatter(
@@ -19,7 +21,7 @@ fn build_test_unit_parser_and_formatter(
   row_sep: String,
   meta_sep: String,
   escaper: String,
-) -> #(Formatter(RowData), Parser(RowData)) {
+) -> #(Formatter(RowData), Parser(RowData, Nil)) {
   #(
     mesv_test.row_data_formatter(col_sep, row_sep, escaper)
       |> format.set_meta_sep(meta_sep),
@@ -34,39 +36,48 @@ fn build_test_unit(
   meta_sep: String,
   escaper: String,
 ) -> fn(List(#(String, String)), List(RowData)) ->
-  Result(List(Result(RowData, ParsingError)), ParsingError) {
-  fn(metadata: List(#(String, String)), rows: List(RowData)) -> Result(
-    List(Result(RowData, ParsingError)),
-    ParsingError,
+  Result(
+    #(List(#(String, String)), List(Result(RowData, DataRowError(Nil)))),
+    PreprocessingError,
   ) {
-    let #(formatter, parser) =
-      build_test_unit_parser_and_formatter(col_sep, row_sep, meta_sep, escaper)
-
+  let #(formatter, parser) =
+    build_test_unit_parser_and_formatter(col_sep, row_sep, meta_sep, escaper)
+  let headers = ["Name", "Age", "Comment"]
+  fn(metadata: List(#(String, String)), rows: List(RowData)) {
     formatter
+    |> format.set_headers(headers)
     |> format.preprocess(metadata)
     |> format.then(rows)
     |> fn(str: String) {
-      parse.preprocess(parser, Text(str))
-      |> result.map_error(fn(_) { RanOutOfValues })
-      |> result.try(fn(preprocess_out) {
+      parser
+      |> parse.set_expected_headers(InOrderExact(headers))
+      |> parse.preprocess(Text(str))
+      // |> result.map_error(fn(_) { RanOutOfValues })
+      |> result.map(fn(preprocess_out) {
         let #(parsed_metadata, parser, csv_source) = preprocess_out
-        case metadata == parsed_metadata {
-          True -> parse.run(parser, csv_source)
-          False -> Error(RanOutOfValues)
-        }
+        #(parsed_metadata, parse.run(parser, csv_source))
       })
     }
   }
 }
 
-fn wrap(val: List(a)) -> Result(List(Result(a, ParsingError)), ParsingError) {
-  Ok(val |> list.map(Ok))
+fn wrap(
+  meta: List(#(String, String)),
+  val: List(a),
+) -> Result(
+  #(List(#(String, String)), List(Result(a, DataRowError(Nil)))),
+  PreprocessingError,
+) {
+  Ok(#(meta, val |> list.map(Ok)))
 }
+
+const empty_metadata = []
 
 pub fn default_normal_empty_test() -> Nil {
   let parsed = build_test_unit(",", "\n", ":", "\"")
 
-  assert parsed([], mesv_test.normal_data()) == wrap(mesv_test.normal_data())
+  assert parsed(empty_metadata, mesv_test.normal_data())
+    == wrap(empty_metadata, mesv_test.normal_data())
     as "Round trip default parameters | Empty metadata, normal"
 }
 
@@ -77,8 +88,8 @@ pub fn default_column_separator_empty_test() -> Nil {
   let esc = "\""
   let parsed = build_test_unit(col_sep, row_sep, meta_sep, esc)
 
-  assert parsed([], mesv_test.column_separator_data(col_sep))
-    == wrap(mesv_test.column_separator_data(col_sep))
+  assert parsed(empty_metadata, mesv_test.column_separator_data(col_sep))
+    == wrap(empty_metadata, mesv_test.column_separator_data(col_sep))
     as "Round trip default parameters | Empty metadata, column separator"
 }
 
@@ -89,8 +100,8 @@ pub fn default_row_separator_empty_test() -> Nil {
   let esc = "\""
   let parsed = build_test_unit(col_sep, row_sep, meta_sep, esc)
 
-  assert parsed([], mesv_test.row_separator_data(row_sep))
-    == wrap(mesv_test.row_separator_data(row_sep))
+  assert parsed(empty_metadata, mesv_test.row_separator_data(row_sep))
+    == wrap(empty_metadata, mesv_test.row_separator_data(row_sep))
     as "Round trip default parameters | Empty metadata, row separator"
 }
 
@@ -101,8 +112,8 @@ pub fn default_escaper_empty_test() -> Nil {
   let esc = "\""
   let parsed = build_test_unit(col_sep, row_sep, meta_sep, esc)
 
-  assert parsed([], mesv_test.escaper_data(esc))
-    == wrap(mesv_test.escaper_data(esc))
+  assert parsed(empty_metadata, mesv_test.escaper_data(esc))
+    == wrap(empty_metadata, mesv_test.escaper_data(esc))
     as "Round trip default parameters | Empty metadata, escaper"
 }
 
@@ -112,7 +123,7 @@ pub fn default_normal_single_row_test() -> Nil {
   let parsed = build_test_unit(",", "\n", ":", "\"")
 
   assert parsed(single_row_metadata, mesv_test.normal_data())
-    == wrap(mesv_test.normal_data())
+    == wrap(single_row_metadata, mesv_test.normal_data())
     as "Round trip default parameters | Metadata single line, normal"
 }
 
@@ -124,7 +135,7 @@ pub fn default_column_separator_single_row_test() -> Nil {
   let parsed = build_test_unit(col_sep, row_sep, meta_sep, esc)
 
   assert parsed(single_row_metadata, mesv_test.column_separator_data(col_sep))
-    == wrap(mesv_test.column_separator_data(col_sep))
+    == wrap(single_row_metadata, mesv_test.column_separator_data(col_sep))
     as "Round trip default parameters | Metadata single line, column separator"
 }
 
@@ -136,7 +147,7 @@ pub fn default_row_separator_single_row_test() -> Nil {
   let parsed = build_test_unit(col_sep, row_sep, meta_sep, esc)
 
   assert parsed(single_row_metadata, mesv_test.row_separator_data(row_sep))
-    == wrap(mesv_test.row_separator_data(row_sep))
+    == wrap(single_row_metadata, mesv_test.row_separator_data(row_sep))
     as "Round trip default parameters | Metadata single line, row separator"
 }
 
@@ -148,7 +159,7 @@ pub fn default_escaper_single_row_test() -> Nil {
   let parsed = build_test_unit(col_sep, row_sep, meta_sep, esc)
 
   assert parsed(single_row_metadata, mesv_test.escaper_data(esc))
-    == wrap(mesv_test.escaper_data(esc))
+    == wrap(single_row_metadata, mesv_test.escaper_data(esc))
     as "Round trip default parameters | Metadata single line, escaper"
 }
 
@@ -163,7 +174,7 @@ pub fn default_normal_multi_row_test() -> Nil {
   let parsed = build_test_unit(",", "\n", ":", "\"")
 
   assert parsed(multi_row_metadata, mesv_test.normal_data())
-    == wrap(mesv_test.normal_data())
+    == wrap(multi_row_metadata, mesv_test.normal_data())
     as "Round trip default parameters | Metadata multiple lines, normal"
 }
 
@@ -175,7 +186,7 @@ pub fn default_column_separator_multi_row_test() -> Nil {
   let parsed = build_test_unit(col_sep, row_sep, meta_sep, esc)
 
   assert parsed(multi_row_metadata, mesv_test.column_separator_data(col_sep))
-    == wrap(mesv_test.column_separator_data(col_sep))
+    == wrap(multi_row_metadata, mesv_test.column_separator_data(col_sep))
     as "Round trip default parameters | Metadata multiple lines, column separator"
 }
 
@@ -187,7 +198,7 @@ pub fn default_row_separator_multi_row_test() -> Nil {
   let parsed = build_test_unit(col_sep, row_sep, meta_sep, esc)
 
   assert parsed(multi_row_metadata, mesv_test.row_separator_data(row_sep))
-    == wrap(mesv_test.row_separator_data(row_sep))
+    == wrap(multi_row_metadata, mesv_test.row_separator_data(row_sep))
     as "Round trip default parameters | Metadata multiple lines, row separator"
 }
 
@@ -199,36 +210,36 @@ pub fn default_escaper_multi_row_test() -> Nil {
   let parsed = build_test_unit(col_sep, row_sep, meta_sep, esc)
 
   assert parsed(multi_row_metadata, mesv_test.escaper_data(esc))
-    == wrap(mesv_test.escaper_data(esc))
+    == wrap(multi_row_metadata, mesv_test.escaper_data(esc))
     as "Round trip default parameters | Metadata multiple lines, escaper"
 }
 
 pub fn default_normal_empty_key_test() -> Nil {
   let parsed = build_test_unit(",", "\n", ":", "\"")
 
-  assert parsed(
-      [#("", "oh no, my key is empty, whatever will i do")],
-      mesv_test.normal_data(),
-    )
-    == wrap(mesv_test.normal_data())
+  let metadata = [#("", "oh no, my key is empty, whatever will i do")]
+
+  assert parsed(metadata, mesv_test.normal_data())
+    == wrap(metadata, mesv_test.normal_data())
     as "Round trip default parameters | Metadata empty key"
 }
 
 pub fn default_normal_escaped_key_test() -> Nil {
   let parsed = build_test_unit(",", "\n", ":", "\"")
 
-  assert parsed([#(":", "you can't do that")], mesv_test.normal_data())
-    == wrap(mesv_test.normal_data())
+  let metadata = [#(":", "you can't do that")]
+
+  assert parsed(metadata, mesv_test.normal_data())
+    == wrap(metadata, mesv_test.normal_data())
     as "Round trip default parameters | Metadata escaped key"
 }
 
 pub fn default_normal_escaped_value_test() -> Nil {
   let parsed = build_test_unit(",", "\n", ":", "\"")
 
-  assert parsed(
-      [#("why not? you try", "oh sh:t, i can")],
-      mesv_test.normal_data(),
-    )
-    == wrap(mesv_test.normal_data())
+  let metadata = [#("why not? you try", "oh sh:t, i can")]
+
+  assert parsed(metadata, mesv_test.normal_data())
+    == wrap(metadata, mesv_test.normal_data())
     as "Round trip default parameters | Metadata escaped value"
 }
