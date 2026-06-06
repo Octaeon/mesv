@@ -1,7 +1,7 @@
 import gleam/string
 import mesv/parse.{
-  ExpectedHeadersMismatch, HeadersMustContain, HeadersMustContainPassing,
-  InOrderExact, InOrderMustPass, MalformedCell, Skip, Text,
+  ExpectedHeadersMismatch, HeadersMustContain, HeadersMustContainPassing, Ignore,
+  InOrderExact, InOrderMustPass, MalformedCell, Text,
 }
 import mesv_test
 
@@ -48,7 +48,7 @@ pub fn default_skip_normal_test() -> Nil {
   let esc = "\""
   let parsed =
     mesv_test.row_data_parser(col_sep, row_sep, esc)
-    |> parse.set_expected_headers(Skip)
+    |> parse.set_expected_headers(Ignore)
     |> parse.run(Text(
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
@@ -63,7 +63,7 @@ pub fn default_skip_empty_row_test() -> Nil {
   let esc = "\""
   let parsed =
     mesv_test.row_data_parser(col_sep, row_sep, esc)
-    |> parse.set_expected_headers(Skip)
+    |> parse.set_expected_headers(Ignore)
     |> parse.run(Text(
       "\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
@@ -78,7 +78,7 @@ pub fn default_skip_malformed_test() -> Nil {
   let esc = "\""
   let parsed =
     mesv_test.row_data_parser(col_sep, row_sep, esc)
-    |> parse.set_expected_headers(Skip)
+    |> parse.set_expected_headers(Ignore)
     |> parse.run(Text(
       "this,header,row,has,way,too,many,elements,and \"they're not\" even properly escaped!, but it will be skipped anyways\n"
       <> "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
