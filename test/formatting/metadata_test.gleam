@@ -65,7 +65,7 @@ pub fn default_escaped_key_test() -> Nil {
     |> format.preprocess([
       #("doublequotes" <> esc <> " key", "no"),
       #("meta" <> meta_sep <> " key", "also no"),
-      #("row" <> meta_sep <> "separators?", "I'm 'fraid *not*"),
+      #("row" <> row_sep <> "separators?", "I'm 'fraid *not*"),
     ])
     |> format.then(mesv_test.normal_data())
 
