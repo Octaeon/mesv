@@ -221,7 +221,6 @@ fn escapeify(formatter: Formatter(a)) -> fn(String) -> String {
   let escaper = formatter.escaper
   fn(el: String) -> String {
     el
-    |> string.trim()
     |> util.multi_replace([#(escaper, escaper <> escaper)])
     |> wrap(in: escaper)
   }
@@ -240,9 +239,10 @@ fn make_to_escape(formatter: Formatter(a)) -> fn(String) -> Bool {
 }
 
 fn make_ensafeify(formatter: Formatter(a)) -> fn(String) -> String {
+  let ensafeify = escapeify(formatter)
   fn(val: String) -> String {
     case formatter.escape_all || make_to_escape(formatter)(val) {
-      True -> escapeify(formatter)(val)
+      True -> ensafeify(val)
       False -> val
     }
   }
@@ -270,7 +270,6 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   }
   |> list.map(fn(values: List(String)) -> String {
     values
-    // |> list.map(string.trim)
     |> list.map(make_ensafeify(formatter))
     |> string.join(column_separator)
   })
@@ -293,7 +292,6 @@ pub fn preprocess(
         Some(headers) -> {
           let row =
             headers
-            // |> list.map(string.trim)
             |> list.map(make_ensafeify(formatter))
             |> string.join(formatter.column_separator)
           #(
