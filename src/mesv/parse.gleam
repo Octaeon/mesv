@@ -357,6 +357,57 @@ pub fn column(
   })
 }
 
+fn drop(from: List(c), count: Int) -> Result(List(c), Nil) {
+  case count, from {
+    0, _ -> Ok(from)
+    _, [] -> Error(Nil)
+    remaining, list -> drop(list, remaining - 1)
+  }
+}
+
+/// Simply skip the next `count` columns without reading their contents.
+/// 
+/// ## Examples
+/// This
+/// ```gleam
+/// parse.build({
+///   use first_column: String <- mesv.parsed
+///   use third_column: Int <- mesv.parsed
+///
+///   #(first_column, third_column)
+/// })
+/// |> parse.column(Ok)
+/// |> parse.skip_(columns: 1)
+/// |> parse.column(int.parse)
+/// ```
+/// is equivalent to this
+/// ```gleam
+/// parse.build({
+///   use first_column: String <- mesv.parsed
+///   use _: String <- mesv.parsed
+///   use third_column: Int <- mesv.parsed
+///
+///   #(first_column, third_column)
+/// })
+/// |> parse.column(Ok)
+/// |> parse.column(Ok)
+/// |> parse.column(int.parse)
+/// ```
+/// 
+pub fn skip_(parser: Parser(a, e), columns count: Int) -> Parser(a, e) {
+  Parser(..parser, parse: fn(tokens: List(String)) -> Result(
+    #(a, List(String)),
+    DataRowError(e),
+  ) {
+    use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
+
+    remaining_tokens
+    |> drop(count)
+    |> result.map(fn(t) { #(constructor, t) })
+    |> result.map_error(fn(_) { NotEnoughCells })
+  })
+}
+
 /// Documentation to be build :|
 /// 
 pub fn set_expected_headers(
