@@ -58,6 +58,7 @@ pub opaque type Builder(a, e) {
     row_separator: String,
     escaper: String,
     metadata_separator: String,
+    column_names: List(String),
     parse: fn(List(String)) -> #(List(String), Result(a, e)),
     format: fn(fn(a) -> String) -> fn(a) -> List(String),
   )
@@ -69,6 +70,7 @@ pub fn build(constructor: fn(a) -> b) -> Builder(fn(a) -> b, CellError(e)) {
     row_separator: "\n",
     escaper: "\"",
     metadata_separator: ":",
+    column_names: [],
     parse: fn(tokens: List(String)) -> #(
       List(String),
       Result(fn(a) -> b, CellError(e)),
@@ -95,6 +97,7 @@ pub fn column(
     row_separator,
     escaper,
     metadata_separator,
+    columns,
     parse,
     format,
   ) = builder
@@ -108,6 +111,7 @@ pub fn column(
     row_separator,
     escaper,
     metadata_separator,
+    columns,
     fn(tokens: List(String)) -> #(List(String), Result(b, CellError(e))) {
       let #(remaining_tokens, result) = parse(tokens)
       case result {
