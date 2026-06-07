@@ -197,6 +197,9 @@ pub opaque type Parser(a, b) {
 
 pub type CsvSource {
   Text(String)
+  /// If your pass in this variant of the source to `preprocess`, it is up to you to guarantee
+  /// that the rows are split on the specified row separators.
+  /// 
   RowStream(Stream(String))
 }
 
