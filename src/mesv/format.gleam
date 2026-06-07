@@ -119,7 +119,7 @@ type EscapeWhich {
 /// that every possible input to your formatting function can be losslessly parsed with
 /// the corresponding parsing function.
 /// 
-pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
+pub fn build(formatter: fn(a) -> List(String)) -> Formatter(a) {
   Formatter(
     column_separator: ",",
     row_separator: "\n",
@@ -127,31 +127,40 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
     metadata_separator: ":",
     escape_all: False,
     headers: None,
-    formatter: f,
+    formatter: formatter,
   )
 }
 
-pub fn stepped_build(f: fn(a) -> String) -> Formatter(a) {
+pub fn start(
+  column_name: String,
+  value_formatter: fn(a) -> String,
+) -> Formatter(a) {
   Formatter(
     column_separator: ",",
     row_separator: "\n",
     escaper: "\"",
     metadata_separator: ":",
     escape_all: False,
-    headers: None,
-    formatter: fn(value: a) -> List(String) { [f(value)] },
+    headers: Some([column_name]),
+    formatter: fn(value: a) -> List(String) { [value_formatter(value)] },
   )
 }
 
 pub fn column(
   formatter: Formatter(a),
+  column_name: String,
   format: fn(a) -> String,
 ) -> Formatter(a) {
-  Formatter(..formatter, formatter: fn(value: a) -> List(String) {
-    value
-    |> formatter.formatter()
-    |> list.append([format(value)])
-  })
+  Formatter(
+    ..formatter,
+    headers: formatter.headers
+      |> option.map(list.append(_, [column_name])),
+    formatter: fn(value: a) -> List(String) {
+      value
+      |> formatter.formatter()
+      |> list.append([format(value)])
+    },
+  )
 }
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
