@@ -361,7 +361,7 @@ fn drop(from: List(c), count: Int) -> Result(List(c), Nil) {
   case count, from {
     0, _ -> Ok(from)
     _, [] -> Error(Nil)
-    remaining, list -> drop(list, remaining - 1)
+    remaining, [_, ..list] -> drop(list, remaining - 1)
   }
 }
 
