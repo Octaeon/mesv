@@ -16,6 +16,7 @@
 //// and `fn decode(String) -> a` satisfy the condition that `for every possible i,
 //// i = decode(encode(i))`)
 
+import gleam/list
 import gleam/result
 
 /// A subset of an identity function for 1-arity functions.
@@ -43,8 +44,12 @@ pub fn parsed(f: fn(a) -> b) -> fn(a) -> b {
   f
 }
 
-pub type Mapping(a, e) {
-  Mapping(encode: fn(a) -> String, decode: fn(String) -> Result(a, e))
+pub type Mapping(a, b, e) {
+  Mapping(
+    get: fn(b) -> a,
+    encode: fn(a) -> String,
+    decode: fn(String) -> Result(a, e),
+  )
 }
 
 pub type CellError(e) {
@@ -59,39 +64,30 @@ pub opaque type Builder(a, e) {
     escaper: String,
     metadata_separator: String,
     column_names: List(String),
-    parse: fn(List(String)) -> #(List(String), Result(a, e)),
-    format: fn(fn(a) -> String) -> fn(a) -> List(String),
+    parse: fn(List(String)) -> Result(#(a, List(String)), e),
+    format: fn() -> #(a, List(fn(a) -> String)),
   )
 }
 
-pub fn build(constructor: fn(a) -> b) -> Builder(fn(a) -> b, CellError(e)) {
+pub fn start(constructor: fn(a) -> b) -> Builder(fn(a) -> b, e) {
   Builder(
     column_separator: ",",
     row_separator: "\n",
     escaper: "\"",
     metadata_separator: ":",
     column_names: [],
-    parse: fn(tokens: List(String)) -> #(
-      List(String),
-      Result(fn(a) -> b, CellError(e)),
-    ) {
-      let _out = case tokens {
-        [] -> #([], Error(NotEnoughTokens))
-        [first, ..rest] -> #(rest, Ok(fn(mapping: a) -> b { todo }))
-      }
+    parse: fn(tokens: List(String)) -> Result(#(fn(a) -> b, List(String)), e) {
+      Ok(#(constructor, tokens))
     },
-    format: fn(encoder: fn(fn(a) -> b) -> String) -> fn(fn(a) -> b) ->
-      List(String) {
-      fn(transform: fn(a) -> b) -> List(String) { [encoder(transform)] }
-    },
+    format: fn() { #(constructor, []) },
   )
 }
 
 pub fn column(
   builder: Builder(fn(a) -> b, CellError(e)),
-  mapping: Mapping(a, e),
+  mapping: Mapping(a, b, e),
 ) -> Builder(b, CellError(e)) {
-  let Mapping(encode_token, decode_token) = mapping
+  let Mapping(get, encode_token, decode_token) = mapping
   let Builder(
     column_separator,
     row_separator,
@@ -102,40 +98,32 @@ pub fn column(
     format,
   ) = builder
 
-  let tes = fn(transform: fn(a) -> b) -> String {
-    let _ = fn(l: a) { transform(l) }
-    todo
-  }
   Builder(
     column_separator,
     row_separator,
     escaper,
     metadata_separator,
     columns,
-    fn(tokens: List(String)) -> #(List(String), Result(b, CellError(e))) {
-      let #(remaining_tokens, result) = parse(tokens)
-      case result {
-        Ok(constructor) -> {
-          case remaining_tokens {
-            [] -> #([], Error(NotEnoughTokens))
-            [first, ..rest] -> #(
-              rest,
-              decode_token(first)
-                |> result.map(constructor)
-                |> result.map_error(fn(err) {
-                  CellError(cell: first, error: err)
-                }),
-            )
-          }
-        }
-        Error(e) -> #(remaining_tokens, Error(e))
+    parse: fn(tokens: List(String)) -> Result(#(b, List(String)), CellError(e)) {
+      use #(constructor, remaining_tokens) <- result.try(parse(tokens))
+
+      case remaining_tokens {
+        [cell, ..rest] ->
+          cell
+          |> decode_token()
+          |> result.map_error(fn(e) { CellError(cell, e) })
+          |> result.map(constructor)
+          |> result.map(fn(b) { #(b, rest) })
+
+        [] -> Error(NotEnoughTokens)
       }
     },
-    fn(value: fn(b) -> String) -> fn(b) -> List(String) {
-      fn(encode: b) -> List(String) {
-        // let t = encode(value)
-        todo
-      }
+    format: fn() {
+      let #(constructor, tokens) = format()
+      let _ = #(constructor(v), list.append(tokens, [encode_token(v)]))
+      // I don't know if what I'm trying to do here is possible (on a mathematical logic level)
+      // I will do other things and think about how I could do this in another way.
+      todo
     },
   )
 }
