@@ -127,14 +127,37 @@ pub type PreprocessingError {
   /// it equaled.
   /// 
   HeadersMismatch(found_headers: List(String), results: List(Result(Int, Nil)))
+  /// When trying to parse the first row, an error occured, which is encapsulated by the enum field of this variant.
+  /// 
   FailedHeaderParsing(reason: DataRowError(Nil))
+  /// When trying to get the first row to check the headers, it was empty.
+  /// 
   SourceEmpty
 }
 
+/// A data type explaining an error that occured when trying to parse a metadata row.
+/// 
+/// They are returned only when calling the [`parse.preprocess`](parse.html#preprocess) function.
+/// 
 pub type MetadataRowError {
+  /// When trying to parse a row into a `key` and `value` on a metadata separator, the row didn't contain any separators.
+  /// 
+  /// The field `row` contains the row in question.
+  /// 
   NoSeparator(row: String)
+  /// When trying to parse a row by splitting it on unescaped separators, it was split into more than two Substrings, meaning that there was more than one unescaped separator.
+  /// 
   UnescapedSeparators(field: String)
+  /// When trying to parse a row, after separating it into a `key` and `value`, this field was found to be malformed, due to being flanked only on one end by escapers, but not on the other
+  /// 
+  /// TODO : Verify if this is true, I don't exactly remember and I need to go to sleep rn
   MetadataUnescapedEscapers(field: String)
+  /// When trying to parse a row, after separating it into a `key` and `value`, this field was found to have an non-duplicated escapers inside of it.
+  /// 
+  /// This is checked by checking if the count of non-overlapping instances of escapers = 2 * count of non-overlapping instances of duplicated escapers.
+  /// 
+  /// If that is not true, it means that there exists an escaper that was not duplicated inside of the field.
+  /// 
   MetadataNonDuplicatedEscapers(field: String)
 }
 
@@ -331,6 +354,57 @@ pub fn column(
 
       [] -> Error(NotEnoughCells)
     }
+  })
+}
+
+fn drop(from: List(c), count: Int) -> Result(List(c), Nil) {
+  case count, from {
+    0, _ -> Ok(from)
+    _, [] -> Error(Nil)
+    remaining, [_, ..list] -> drop(list, remaining - 1)
+  }
+}
+
+/// Simply skip the next `count` columns without reading their contents.
+/// 
+/// ## Examples
+/// This
+/// ```gleam
+/// parse.build({
+///   use first_column: String <- mesv.parsed
+///   use third_column: Int <- mesv.parsed
+///
+///   #(first_column, third_column)
+/// })
+/// |> parse.column(Ok)
+/// |> parse.skip_(columns: 1)
+/// |> parse.column(int.parse)
+/// ```
+/// is equivalent to this
+/// ```gleam
+/// parse.build({
+///   use first_column: String <- mesv.parsed
+///   use _: String <- mesv.parsed
+///   use third_column: Int <- mesv.parsed
+///
+///   #(first_column, third_column)
+/// })
+/// |> parse.column(Ok)
+/// |> parse.column(Ok)
+/// |> parse.column(int.parse)
+/// ```
+/// 
+pub fn skip_(parser: Parser(a, e), columns count: Int) -> Parser(a, e) {
+  Parser(..parser, parse: fn(tokens: List(String)) -> Result(
+    #(a, List(String)),
+    DataRowError(e),
+  ) {
+    use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
+
+    remaining_tokens
+    |> drop(count)
+    |> result.map(fn(t) { #(constructor, t) })
+    |> result.map_error(fn(_) { NotEnoughCells })
   })
 }
 
