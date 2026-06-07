@@ -11,9 +11,6 @@ type = "github"
 user = "Octaeon"
 repo = "mesv"
 
-# I'm pretty sure the link to the Hex page, Hexdocs page and repository will be automatically generated once I publish?
-# links = [{ title = "Website", href = "" }]
-
 # Documentation
 [[documentation.pages]]
 title = "ABNF Grammar"
