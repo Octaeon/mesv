@@ -732,25 +732,31 @@ pub fn set_strict_columns(parser: Parser(a, e)) -> Parser(a, e) {
 
 // => Execution functions
 
-/// Preprocess the `source` of the CSV file by reading all of the metadata contained in the
+/// Preprocess the `CsvSource` by reading all of the metadata contained in the
 /// frontmatter block (started and ended by a row containing only three `-` characters, like
-/// so: `---` ) as well as the headers as specified in the `expect_headers` function.
+/// so: `---` ), as well as the headers as specified in the
+/// [`parse.set_expected_headers`](parse.html#set_expected_headers) function.
 /// 
-/// ### Return explanation
+/// After calling this function, pipe in the output directly to the [`parse.then`](parse.html#then)
+/// function, which will rearrange its' structure and directly call [`parse.run`](parse.html#run)
+/// function and return its' output, as long as this function returned `Ok`.
+/// 
+/// ## Output explanation
 /// Returns a `Result`:
-/// - `Error(String)` if the headers didn't match
-/// - `Ok(#(List(#(String, String)), Parser(a, e), String))` if the headers did match.
+/// - `Error(PreprocessingError)` if the headers didn't match or there were errors encountered
+///    when parsing metadata fields
+/// - `Ok(#(List(#(String, String)), Parser(a, e), CsvSource))` if the headers did match
 /// 
 /// In the case of an `Ok`, the values are like so:
 /// - The first `List(#(String, String))` is the list of metadata at the beginning. Right now,
 ///   if the user wants to do something with it, they must do so manually.
 /// - Second element `Parser(a, e)` - a modified parser to use when calling the
-///   [`parse.run`](parse.html#run) function later - it will expect that the first row
-///   is the first data point, and will behave accordingly.
-/// - The third element `String` is the contents of the CSV file with the metadata and header
+///   [`parse.run`](parse.html#run) function later, with its' behaviour adjusted slightly
+///   based on the contents of the headers.
+/// - The third element `CsvSource` is the contents of the CSV file with the metadata and header
 ///   row removed, which is what should go into the [`parse.run`](parse.html#run) function later.
 ///   If you for some reason want to use `mesv` only for processing metadata, you could discard
-///   everything else and parse this `String` with another library.
+///   everything else and deconstruct this type into the raw `String`.
 /// 
 /// As of right now, the frontmatter metadata can only be parsed if it follows the grammar
 /// `key sep value newline`, where `sep` is by default `:` and `newline` is the same as the
@@ -789,14 +795,49 @@ pub fn preprocess(
           Error(err) -> Error(err)
         },
       )
-      let parser = parser |> set_expected_headers(Empty)
-      let data = row_stream |> RowStream
-      Ok(#(metadata, parser, data))
+      Ok(#(
+        metadata,
+        parser |> set_expected_headers(Empty),
+        RowStream(row_stream),
+      ))
     }
     Done -> Error(SourceEmpty)
   }
 }
 
+/// Utility function to make calling the parser cleaner.
+/// 
+/// Meant to be used by piping the output from the [`preprocess`](parse.html#preprocess)
+/// function into it, the argument it takes is ugly to say the least.
+/// 
+/// Internally, it's nothing special - it uses `result.map` to deconstruct the successfull
+/// output (`metadata`, `Parser` and `CsvSource`) and uses those values to call
+/// [`parse.run`](parse.html#run), and returns its' output along with the metadata.
+/// 
+/// If you want the *maximally clean* experience, pipe this function's output into
+/// [`parse.just_data`](parse.html#just_data), which will further map the Result into
+/// `Result(List(a), PreprocessingError)` by discarding all rows which failed to parse
+/// correctly for whatever reason.
+/// 
+/// ## Examples
+/// Successfull initial parsing
+/// ```gleam
+/// parser
+/// |> parse.preprocess(Text("some,data,123"))
+/// // -> Ok([], parser, CsvSource)
+/// |> parse.then()
+/// // -> Ok([], [Ok(#("some", "data", 123))])
+/// ```
+/// Failed initial parsing
+/// ```gleam
+/// parser
+/// |> parse.preprocess(Text("\"som\"e,data,123"))
+/// // -> Error(PreprocessingError(FailedHeaderParsing(DataMismatchedEscapers("\"some\"e"))))
+/// // The errors are very verbose, I know
+/// |> parse.then()
+/// // -> Error(...) identical error as above, nothing happens.
+/// ```
+/// 
 pub fn then(
   preprocessed: Result(
     #(List(#(String, String)), Parser(a, e), CsvSource),
@@ -813,46 +854,38 @@ pub fn then(
   })
 }
 
-/// Function to use the specified `Parser(a, e)` to transform the `source` into a
-/// `Result(List(Result(a, ParsingError)))`.
+/// Function to use the specified `Parser(a, e)` to transform the `CsvSource` into a
+/// `List(Result(a, DataRowError(e)))`.
 /// 
-/// If the headers specified in the [`parse.set_expected_headers`](parse.html#set_expected_headers)
-/// function did not match the first row contents, a `ParsingError` will be returned, of the type
-/// `ExpectedHeadersMismatch`, containing both the expected headers and what was found.
+/// This function does not handle metadata, headers, or anything else - it purely tries to
+/// parse each line of the `CsvSource` into the value of type `a` using the parsing function
+/// encoded inside `Parser`.
 /// 
-/// If the headers weren't specified, or were specified and match the expected pattern,
-/// the function will return `Ok(List(Result(a, ParsingError)))`.
-/// 
-/// If you need a simple way to get the `List(a)` out of that, use the
-/// [`parse.get_parsed`](parse.html#get_parsed) function.
-/// 
-/// The first is the list of all rows that were successfully parsed, while the second is a
-/// list of `ParsingError`s that were thrown due to a row failing to parse.
-/// 
-/// > What to do with both of these Lists is up to the user, whether to ignore all errors or abort
-///   if any errors occur.
+/// To handle headers and metadata, use [`parse.preprocess`](parse.html#preprocess)!
 /// 
 /// ## Order of operations
 /// The order of operations when parsing is as such:
-/// 1. The rows of the source `String` are split using the
+/// 1. The rows of the source `CsvSource` are split using the
 ///    [`util.split_on_unescaped`](util.html#split_on_unescaped) helper function.
-/// 2. If the `List(String)` of the rows is not empty, first check if the headers match what
-///    the user specified.
-/// 3. If they do, process each row in turn:
+/// 2. If they do, process each row in turn:
 ///    - Split row `String` into a `List(String)` of raw cells
 ///    - Unwrap each cell by first trimming whitespace surrounding it. If the trimmed `String`
 ///      both starts and ends with the escaper, remove them and return what was wrapped in them;
 ///      if not, return the original raw cell. If the trimmed string only has the escaper on
-///      *one* end, return an `Error(MalformedCell)`.
-///    - If all of the cells returned an `Ok`, proceed
-///    - Unescape each cell's contents by deduplicating the escaper characters
-///    - Trim the whitespace of each cell according to what the user specified using the
-///      [`parse.set_trim_whitespace`](parse.html#set_trim_whitespace) function
+///      *one* end, return an `Error(DataMismatchedEscapers)` error, along with the field
+///      in question
+///    - If all of the cells were successfully unwrapped without errors, proceed
+///    - Unescape each cell's contents by deduplicating the escaper characters inside.
+///      If the number of found singular escapers is not exactly twice that of the duplicated
+///      escapers, return a `DataNonDuplicatedEscapers` error, along with the field in question.
+///    - Trim the whitespace of each cell's contents according to what the user specified using
+///      the [`parse.set_trim_whitespace`](parse.html#set_trim_whitespace) function
 ///    - Parse the row by passing in the contents of the cells to the parsing functions from
-///      [`parse.column`](parse.html#column), then if they return `Ok`, passing in the output
+///      [`parse.column`](parse.html#column), then if they return `Ok`, pass in the output
 ///      to the curried constructor function passed into the [`parse.build`](parse.html#build)
-///      function
-/// 4. Return a `List(Result(a, ParsingError))` and wrap it in `Ok`
+///      function. If they don't, return a `CellParsingFailed(e)` error, with the type specified
+///      by the user.
+/// 4. Return a finished `List(Result(a, DataRowError(e)))`
 /// 
 pub fn run(
   parser: Parser(a, e),
@@ -861,7 +894,7 @@ pub fn run(
   case make_row_splitter(parser)(source) {
     // Empty file - just return an empty list.
     [] -> []
-    [headers, ..contents] -> {
+    contents -> {
       // A locally defined function capturing the parser data, that is used for processing each row
       let process_row = fn(cells: List(String)) -> Result(a, DataRowError(e)) {
         cells
@@ -887,11 +920,6 @@ pub fn run(
         })
       }
 
-      let contents = case parser.expect_headers {
-        Ignore -> contents
-        _ -> [headers, ..contents]
-      }
-
       contents
       |> list.map(fn(row_string) {
         // All of the parsing functions are condensed here to avoid having to map multiple times.
@@ -903,8 +931,9 @@ pub fn run(
   }
 }
 
-/// > **This function is deprecated, and should be replaced with the
-///   [`parse.run`](parse.html#run) function.**
+/// > **This function is deprecated, and should be replaced by using the
+///   [`parse.preprocess`](parse.html#preprocess) and [`parse.run`](parse.html#run)
+///   functions in that order.**
 /// 
 /// Function to use the specified `Parser(a, e)` to transform the source into a `#(List(a),
 /// List(ParsingError))`.
@@ -961,7 +990,8 @@ pub fn get_parsed(rows: List(Result(a, DataRowError(e)))) -> List(a) {
   |> list.filter_map(function.identity)
 }
 
-/// A helper function meant to be called with the results of `parse.then` as the output.
+/// A helper function meant to be called with the output of [`parse.then`](parse.html#then)
+/// as the input.
 /// 
 /// It should only be used if you're sure that you only want the successfully parsed data
 /// rows, and don't care about any errors or any of the metadata.
@@ -969,6 +999,16 @@ pub fn get_parsed(rows: List(Result(a, DataRowError(e)))) -> List(a) {
 /// Due to this, it should not be used in situations where errors must be handled.
 /// 
 /// Additionally, it is also quite unfriendly for debugging, as the errors are simply discarded.
+/// 
+/// ## Examples
+/// ```gleam
+/// parser
+/// |> parse.preprocess(Text("some,data,123\nmalformed\"data!"))
+/// |> parse.then()
+/// |> parse.just_data()
+/// // -> Ok([Ok("some", "data", 123)])
+/// // Malformed data is parsed into `Error`s and discarded.
+/// ```
 /// 
 pub fn just_data(
   processed: Result(
