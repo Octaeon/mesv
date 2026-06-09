@@ -182,14 +182,14 @@ pub type DataRowError(a) {
 /// [`parse.get_parsed`](parse.html#get_parsed) function to easily extract the succesfully parsed
 /// rows. 
 /// 
-pub opaque type Parser(a, b) {
+pub opaque type Parser(a, e) {
   Parser(
     column_separator: String,
     row_separator: String,
     escaper: String,
     metadata_separator: String,
     expect_headers: ExpectedHeaders,
-    parse: fn(List(String)) -> Result(#(a, List(String)), DataRowError(b)),
+    parse: fn(List(String)) -> Result(#(a, List(String)), DataRowError(e)),
     strict_columns: Bool,
     trim_whitespace: #(Bool, Bool),
   )

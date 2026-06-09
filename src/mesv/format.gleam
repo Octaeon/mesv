@@ -145,6 +145,29 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
   )
 }
 
+pub fn stepped_build(f: fn(a) -> String) -> Formatter(a) {
+  Formatter(
+    column_separator: ",",
+    row_separator: "\n",
+    escaper: "\"",
+    metadata_separator: ":",
+    escape_all: False,
+    column_data: #(ExactSameForAllColumns(DoNothing), None),
+    formatter: fn(value: a) -> List(String) { [f(value)] },
+  )
+}
+
+pub fn column(
+  formatter: Formatter(a),
+  format: fn(a) -> String,
+) -> Formatter(a) {
+  Formatter(..formatter, formatter: fn(value: a) -> List(String) {
+    value
+    |> formatter.formatter()
+    |> list.append([format(value)])
+  })
+}
+
 /// Function to set a specific row separator, instead of the default newline (`\n`)
 /// 
 /// If the row separator chosen is longer than a single character, it might cause problems
