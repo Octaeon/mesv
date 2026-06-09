@@ -52,6 +52,9 @@ pub fn count_overlapping(of find: String, in in: String) -> Int {
         in,
         fn(source: String) -> #(String, Int) {
           #(
+            // With each step of the function, we drop 1 character.
+            // Thus, if the string we're searching for is more than 1 character,
+            // the next comparison will be overlapping with this one.
             string.drop_start(source, 1),
             case string.slice(source, 0, string.length(find)) == find {
               True -> 1
@@ -74,22 +77,27 @@ pub fn count_non_overlapping(in in: String, of find: String) -> Int {
   case string.is_empty(find) {
     // If the string to search for is empty, assume the user is trying to find the length of the string they're searching
     True -> string.length(in)
-    False ->
+    False -> {
       recursive_count(
         in,
         fn(source: String) -> #(String, Int) {
           let len = string.length(find)
-          #(
-            string.drop_start(source, len),
-            case string.slice(source, 0, len) == find {
-              True -> 1
-              False -> 0
-            },
-          )
+          // Sneaky little bug.
+          case string.slice(source, 0, len) == find {
+            // If we do find the string we're searching for, drop its' length,
+            // so that the next comparison will not overlap with it
+            True -> #(string.drop_start(source, len), 1)
+            // If we don't find the string, drop only 1 character, not the length
+            // Here was the bug - we were stepping through the String in chunks the length of the target string,
+            // so if the target substring location was offset by some integer that was not a multiple of
+            // its' length, then we wouldn't find it.
+            False -> #(string.drop_start(source, 1), 0)
+          }
         },
         string.is_empty,
         0,
       )
+    }
   }
 }
 
