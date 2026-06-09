@@ -295,58 +295,6 @@ pub fn set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a) {
 
 // => Execution Functions
 
-/// > **This function is deprecated, and should be replaced with the
-///   [`format.run`](format.html#run) function.**
-/// 
-/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
-/// and encodes it into a String.
-/// 
-@deprecated("
-To simplify the API and comply with the Gleam convention, I have decided to rename the format
-function to `run`. This function is still available to call, but should be replaced if possible.
-In new code, use the `run` function.
-")
-pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
-  run(formatter, elements)
-}
-
-/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`, and encodes
-/// it into a String.
-/// 
-/// All of the configuration options need to be set when building the `Formatter`, so
-/// this function should be very simple to understand.
-/// 
-/// If you run this function without first running [`format.preprocess`](format.html#preprocess),
-/// it will still prepend the headers row to the output CSV file, if you specified them. However,
-/// if you do first call `preprocess`, then `preprocess` will be the function which adds the
-/// header row, and the returned `Formatter` will be modified to not add any headers. So,
-/// unless you discard the modified `Formatter` returned from the `preprocess` function and
-/// reuse the original one while still using the metadata `String` returned by `preprocess`,
-/// the headers will not be duplicated.
-/// 
-pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
-  let Formatter(
-    column_separator,
-    row_separator,
-    _escaper,
-    _metadata_separator,
-    _escape_all,
-    #(whitespace, maybe_headers),
-    to_string,
-  ) = formatter
-
-  case maybe_headers {
-    Some(headers) -> [headers, ..elements |> list.map(to_string)]
-    None -> elements |> list.map(to_string)
-  }
-  |> list.map(fn(values: List(String)) -> String {
-    values
-    |> list.map(make_ensafeify(formatter, Data))
-    |> string.join(column_separator)
-  })
-  |> string.join(row_separator)
-}
-
 /// Execution function that takes in a `Formatter(a)` as well as a `List(#(String, String))`,
 /// and uses the configured separators and escapers to format the provided metadata and
 /// headers into a String, and updating the `Formatter` to avoid duplicating headers when
@@ -399,6 +347,58 @@ pub fn then(in: #(Formatter(a), String), format: List(a)) -> String {
   let #(formatter, string) = in
 
   string <> run(formatter, format)
+}
+
+/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`, and encodes
+/// it into a String.
+/// 
+/// All of the configuration options need to be set when building the `Formatter`, so
+/// this function should be very simple to understand.
+/// 
+/// If you run this function without first running [`format.preprocess`](format.html#preprocess),
+/// it will still prepend the headers row to the output CSV file, if you specified them. However,
+/// if you do first call `preprocess`, then `preprocess` will be the function which adds the
+/// header row, and the returned `Formatter` will be modified to not add any headers. So,
+/// unless you discard the modified `Formatter` returned from the `preprocess` function and
+/// reuse the original one while still using the metadata `String` returned by `preprocess`,
+/// the headers will not be duplicated.
+/// 
+pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
+  let Formatter(
+    column_separator,
+    row_separator,
+    _escaper,
+    _metadata_separator,
+    _escape_all,
+    #(whitespace, maybe_headers),
+    to_string,
+  ) = formatter
+
+  case maybe_headers {
+    Some(headers) -> [headers, ..elements |> list.map(to_string)]
+    None -> elements |> list.map(to_string)
+  }
+  |> list.map(fn(values: List(String)) -> String {
+    values
+    |> list.map(make_ensafeify(formatter, Data))
+    |> string.join(column_separator)
+  })
+  |> string.join(row_separator)
+}
+
+/// > **This function is deprecated, and should be replaced with the
+///   [`format.run`](format.html#run) function.**
+/// 
+/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
+/// and encodes it into a String.
+/// 
+@deprecated("
+To simplify the API and comply with the Gleam convention, I have decided to rename the format
+function to `run`. This function is still available to call, but should be replaced if possible.
+In new code, use the `run` function.
+")
+pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
+  run(formatter, elements)
 }
 
 // ==== Private Functions ====
