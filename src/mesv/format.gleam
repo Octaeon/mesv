@@ -177,6 +177,61 @@ pub fn column(
   )
 }
 
+/// Internal function that pads a `List(a)` with element `a` until the `List` is of length `c`.
+/// 
+/// If the List is already the specified length or longer, it is returned unchanged.
+/// 
+fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
+  case c {
+    // If the pad target is non-positive, exit the function immediately
+    n if n <= 0 -> l
+    // Else try to pad to the target
+    count ->
+      el
+      |> list.repeat(count - list.length(l))
+      |> list.append(l, _)
+  }
+}
+
+pub fn column_whitespace(
+  formatter: Formatter(a),
+  whitespace_behaviour: ColumnWhitespaceBehaviour,
+) -> Formatter(a) {
+  let col_behaviour = fn(existing_col_behaviour, pad_with) {
+    case formatter.column_data.1 {
+      Some(l) ->
+        existing_col_behaviour
+        |> pad_list_end_with(list.length(l) - 1, pad_with)
+        |> list.append([whitespace_behaviour])
+      None ->
+        existing_col_behaviour
+        |> list.append([whitespace_behaviour])
+    }
+  }
+
+  let make_col_behaviour = fn(existing_col_behaviour) {
+    case existing_col_behaviour {
+      [] -> col_behaviour(existing_col_behaviour, DoNothing)
+      [head, ..] -> col_behaviour(existing_col_behaviour, head)
+    }
+  }
+
+  let column_whitespace_behaviour = case formatter.column_data.0 {
+    ExactSameForAllColumns(global) ->
+      // If there is a globally specified column behaviour, use it to pad the list
+      SpecifiedForStartingColumns(make_col_behaviour([global]))
+    SpecifiedForStartingColumns(cols) ->
+      SpecifiedForStartingColumns(make_col_behaviour(cols))
+    SpecifiedForAllColumns(cols) -> {
+      SpecifiedForAllColumns(make_col_behaviour(cols))
+    }
+  }
+  Formatter(..formatter, column_data: #(
+    column_whitespace_behaviour,
+    formatter.column_data.1,
+  ))
+}
+
 /// Function to set a specific row separator, instead of the default newline (`\n`)
 /// 
 /// If the row separator chosen is longer than a single character, it might cause problems
