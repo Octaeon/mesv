@@ -68,6 +68,8 @@ import gleam/option.{type Option, None, Some}
 import gleam/string
 import mesv/util
 
+// ==== Public Types ====
+
 /// The type describing how to convert a specified data type `a` into String form.
 /// 
 /// To create it, use the [`format.build`](format.html#build) function and the provided transformation functions (`set_row_sep`, `set_col_sep`, `set_headers`, `set_escaper`) to configure the specific behaviour.
@@ -86,11 +88,6 @@ pub opaque type Formatter(a) {
   )
 }
 
-type EscapeWhich {
-  Metadata
-  Data
-}
-
 pub type ColumnWhitespaceBehaviour {
   DoNothing
   TrimAll
@@ -104,6 +101,17 @@ pub type RowWhitespaceBehaviour {
   SpecifiedForStartingColumns(List(ColumnWhitespaceBehaviour))
   SpecifiedForAllColumns(List(ColumnWhitespaceBehaviour))
 }
+
+// ==== Private Types ====
+
+type EscapeWhich {
+  Metadata
+  Data
+}
+
+// ==== Public API ====
+
+// => Builder Functions
 
 /// Function for directly building a `Formatter` that outputs the specified
 /// elements in an exact order.
@@ -175,22 +183,6 @@ pub fn column(
       |> list.append([format_col(value)])
     },
   )
-}
-
-/// Internal function that pads a `List(a)` with element `a` until the `List` is of length `c`.
-/// 
-/// If the List is already the specified length or longer, it is returned unchanged.
-/// 
-fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
-  case c {
-    // If the pad target is non-positive, exit the function immediately
-    n if n <= 0 -> l
-    // Else try to pad to the target
-    count ->
-      el
-      |> list.repeat(count - list.length(l))
-      |> list.append(l, _)
-  }
 }
 
 pub fn column_whitespace(
@@ -301,30 +293,7 @@ pub fn set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a) {
   Formatter(..parser, escape_all: escape_all)
 }
 
-/// Internal helper function for creating a function that checks if a specific element needs
-/// to be escaped (wrapped in escaper, which by default is `"`) before being written to file.
-/// 
-/// It's a curried function because I like functional programming, and because it *should*
-/// give some performance improvements if I create such a function before any looping instead
-/// of constructing one for each iteration.
-/// 
-fn needs_escaping(prohibited: List(String)) -> fn(String) -> Bool {
-  fn(el: String) -> Bool {
-    prohibited
-    |> list.any(fn(s: String) -> Bool { string.contains(el, s) })
-  }
-}
-
-/// Internal helper function for creating a function that wraps a String in the specified
-/// 'escaper' String.
-/// 
-/// It's a curried function because I like functional programming, and because it *should*
-/// give some performance improvements if I create such a function before any looping instead
-/// of constructing one for each iteration.
-/// 
-fn wrap(in in: String) -> fn(String) -> String {
-  fn(el: String) -> String { in <> el <> in }
-}
+// => Execution Functions
 
 /// > **This function is deprecated, and should be replaced with the
 ///   [`format.run`](format.html#run) function.**
@@ -339,51 +308,6 @@ In new code, use the `run` function.
 ")
 pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
   run(formatter, elements)
-}
-
-fn escapeify(formatter: Formatter(a)) -> fn(String) -> String {
-  let escaper = formatter.escaper
-  fn(el: String) -> String {
-    el
-    |> util.multi_replace([#(escaper, escaper <> escaper)])
-    |> wrap(in: escaper)
-  }
-}
-
-fn make_to_escape(
-  formatter: Formatter(a),
-  field: EscapeWhich,
-) -> fn(String) -> Bool {
-  case field {
-    Metadata -> [
-      formatter.row_separator,
-      formatter.metadata_separator,
-      formatter.escaper,
-      "\n",
-      "\r",
-    ]
-    Data -> [
-      formatter.column_separator,
-      formatter.row_separator,
-      formatter.escaper,
-      "\n",
-      "\r",
-    ]
-  }
-  |> needs_escaping()
-}
-
-fn make_ensafeify(
-  formatter: Formatter(a),
-  field: EscapeWhich,
-) -> fn(String) -> String {
-  let ensafeify = escapeify(formatter)
-  fn(val: String) -> String {
-    case formatter.escape_all || make_to_escape(formatter, field)(val) {
-      True -> ensafeify(val)
-      False -> val
-    }
-  }
 }
 
 /// Execution function that takes in a `Formatter(a)` as well as a `List(a)`, and encodes
@@ -467,6 +391,104 @@ pub fn preprocess(
   }
 }
 
+/// Helper function to use after calling the [`format.preprocess`](format.html#preprocess)
+/// function to format metadata using a configured `Formatter`. Use it just as you would
+/// the [`format.run`](format.html#run) function, just only after calling the `preprocess`.
+/// 
+pub fn then(in: #(Formatter(a), String), format: List(a)) -> String {
+  let #(formatter, string) = in
+
+  string <> run(formatter, format)
+}
+
+// ==== Private Functions ====
+
+/// Internal function that pads a `List(a)` with element `a` until the `List` is of length `c`.
+/// 
+/// If the List is already the specified length or longer, it is returned unchanged.
+/// 
+fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
+  case c {
+    // If the pad target is non-positive, exit the function immediately
+    n if n <= 0 -> l
+    // Else try to pad to the target
+    count ->
+      el
+      |> list.repeat(count - list.length(l))
+      |> list.append(l, _)
+  }
+}
+
+/// Internal helper function for creating a function that checks if a specific element needs
+/// to be escaped (wrapped in escaper, which by default is `"`) before being written to file.
+/// 
+/// It's a curried function because I like functional programming, and because it *should*
+/// give some performance improvements if I create such a function before any looping instead
+/// of constructing one for each iteration.
+/// 
+fn needs_escaping(prohibited: List(String)) -> fn(String) -> Bool {
+  fn(el: String) -> Bool {
+    prohibited
+    |> list.any(fn(s: String) -> Bool { string.contains(el, s) })
+  }
+}
+
+/// Internal helper function for creating a function that wraps a String in the specified
+/// 'escaper' String.
+/// 
+/// It's a curried function because I like functional programming, and because it *should*
+/// give some performance improvements if I create such a function before any looping instead
+/// of constructing one for each iteration.
+/// 
+fn wrap(in in: String) -> fn(String) -> String {
+  fn(el: String) -> String { in <> el <> in }
+}
+
+fn escapeify(formatter: Formatter(a)) -> fn(String) -> String {
+  let escaper = formatter.escaper
+  fn(el: String) -> String {
+    el
+    |> util.multi_replace([#(escaper, escaper <> escaper)])
+    |> wrap(in: escaper)
+  }
+}
+
+fn make_to_escape(
+  formatter: Formatter(a),
+  field: EscapeWhich,
+) -> fn(String) -> Bool {
+  case field {
+    Metadata -> [
+      formatter.row_separator,
+      formatter.metadata_separator,
+      formatter.escaper,
+      "\n",
+      "\r",
+    ]
+    Data -> [
+      formatter.column_separator,
+      formatter.row_separator,
+      formatter.escaper,
+      "\n",
+      "\r",
+    ]
+  }
+  |> needs_escaping()
+}
+
+fn make_ensafeify(
+  formatter: Formatter(a),
+  field: EscapeWhich,
+) -> fn(String) -> String {
+  let ensafeify = escapeify(formatter)
+  fn(val: String) -> String {
+    case formatter.escape_all || make_to_escape(formatter, field)(val) {
+      True -> ensafeify(val)
+      False -> val
+    }
+  }
+}
+
 fn make_metadata_formatter(
   formatter: Formatter(a),
 ) -> fn(#(String, String)) -> String {
@@ -477,14 +499,4 @@ fn make_metadata_formatter(
     <> ensafeify(metadata.1)
     <> formatter.row_separator
   }
-}
-
-/// Helper function to use after calling the [`format.preprocess`](format.html#preprocess)
-/// function to format metadata using a configured `Formatter`. Use it just as you would
-/// the [`format.run`](format.html#run) function, just only after calling the `preprocess`.
-/// 
-pub fn then(in: #(Formatter(a), String), format: List(a)) -> String {
-  let #(formatter, string) = in
-
-  string <> run(formatter, format)
 }
