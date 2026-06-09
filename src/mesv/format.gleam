@@ -81,7 +81,7 @@ pub opaque type Formatter(a) {
     escaper: String,
     metadata_separator: String,
     escape_all: Bool,
-    column_data: #(List(WhitespaceBehaviour), Option(List(String))),
+    column_data: #(RowWhitespaceBehaviour, Option(List(String))),
     formatter: fn(a) -> List(String),
   )
 }
@@ -91,12 +91,18 @@ type EscapeWhich {
   Data
 }
 
-pub type WhitespaceBehaviour {
+pub type ColumnWhitespaceBehaviour {
   DoNothing
   TrimAll
   TrimStart
   LeftAlignPad(to: Int)
   RightAlignPad(to: Int)
+}
+
+pub type RowWhitespaceBehaviour {
+  ExactSameForAllColumns(ColumnWhitespaceBehaviour)
+  SpecifiedForStartingColumns(List(ColumnWhitespaceBehaviour))
+  SpecifiedForAllColumns(List(ColumnWhitespaceBehaviour))
 }
 
 /// Function for directly building a `Formatter` that outputs the specified
@@ -134,7 +140,7 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
     escaper: "\"",
     metadata_separator: ":",
     escape_all: False,
-    column_data: #([], None),
+    column_data: #(ExactSameForAllColumns(DoNothing), None),
     formatter: f,
   )
 }
