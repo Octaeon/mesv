@@ -68,6 +68,8 @@ import gleam/option.{type Option, None, Some}
 import gleam/string
 import mesv/util
 
+// ==== Public Types ====
+
 /// The type describing how to convert a specified data type `a` into String form.
 /// 
 /// To create it, use the [`format.build`](format.html#build) function and the provided transformation functions (`set_row_sep`, `set_col_sep`, `set_headers`, `set_escaper`) to configure the specific behaviour.
@@ -81,15 +83,35 @@ pub opaque type Formatter(a) {
     escaper: String,
     metadata_separator: String,
     escape_all: Bool,
-    headers: Option(List(String)),
+    column_data: #(RowWhitespaceBehaviour, Option(List(String))),
     formatter: fn(a) -> List(String),
   )
 }
+
+pub type ColumnWhitespaceBehaviour {
+  DoNothing
+  TrimAll
+  TrimStart
+  LeftAlignPad(to: Int)
+  RightAlignPad(to: Int)
+}
+
+pub type RowWhitespaceBehaviour {
+  ExactSameForAllColumns(ColumnWhitespaceBehaviour)
+  SpecifiedForStartingColumns(List(ColumnWhitespaceBehaviour))
+  SpecifiedForAllColumns(List(ColumnWhitespaceBehaviour))
+}
+
+// ==== Private Types ====
 
 type EscapeWhich {
   Metadata
   Data
 }
+
+// ==== Public API ====
+
+// => Builder Functions
 
 /// Function for directly building a `Formatter` that outputs the specified
 /// elements in an exact order.
@@ -126,9 +148,80 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
     escaper: "\"",
     metadata_separator: ":",
     escape_all: False,
-    headers: None,
+    column_data: #(ExactSameForAllColumns(DoNothing), None),
     formatter: f,
   )
+}
+
+pub fn start(column_name: String, format_col: fn(a) -> String) -> Formatter(a) {
+  Formatter(
+    column_separator: ",",
+    row_separator: "\n",
+    escaper: "\"",
+    metadata_separator: ":",
+    escape_all: False,
+    column_data: #(ExactSameForAllColumns(DoNothing), Some([column_name])),
+    formatter: fn(value: a) -> List(String) { [format_col(value)] },
+  )
+}
+
+pub fn column(
+  formatter: Formatter(a),
+  column_name: String,
+  format_col: fn(a) -> String,
+) -> Formatter(a) {
+  Formatter(
+    ..formatter,
+    column_data: #(
+      ExactSameForAllColumns(DoNothing),
+      formatter.column_data.1
+        |> option.map(list.append(_, [column_name])),
+    ),
+    formatter: fn(value: a) -> List(String) {
+      value
+      |> formatter.formatter()
+      |> list.append([format_col(value)])
+    },
+  )
+}
+
+pub fn column_whitespace(
+  formatter: Formatter(a),
+  whitespace_behaviour: ColumnWhitespaceBehaviour,
+) -> Formatter(a) {
+  let col_behaviour = fn(existing_col_behaviour, pad_with) {
+    case formatter.column_data.1 {
+      Some(l) ->
+        existing_col_behaviour
+        |> pad_list_end_with(list.length(l) - 1, pad_with)
+        |> list.append([whitespace_behaviour])
+      None ->
+        existing_col_behaviour
+        |> list.append([whitespace_behaviour])
+    }
+  }
+
+  let make_col_behaviour = fn(existing_col_behaviour) {
+    case existing_col_behaviour {
+      [] -> col_behaviour(existing_col_behaviour, DoNothing)
+      [head, ..] -> col_behaviour(existing_col_behaviour, head)
+    }
+  }
+
+  let column_whitespace_behaviour = case formatter.column_data.0 {
+    ExactSameForAllColumns(global) ->
+      // If there is a globally specified column behaviour, use it to pad the list
+      SpecifiedForStartingColumns(make_col_behaviour([global]))
+    SpecifiedForStartingColumns(cols) ->
+      SpecifiedForStartingColumns(make_col_behaviour(cols))
+    SpecifiedForAllColumns(cols) -> {
+      SpecifiedForAllColumns(make_col_behaviour(cols))
+    }
+  }
+  Formatter(..formatter, column_data: #(
+    column_whitespace_behaviour,
+    formatter.column_data.1,
+  ))
 }
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
@@ -164,7 +257,10 @@ pub fn set_headers(
   formatter: Formatter(a),
   new_headers: List(String),
 ) -> Formatter(a) {
-  Formatter(..formatter, headers: Some(new_headers))
+  Formatter(..formatter, column_data: #(
+    formatter.column_data.0,
+    Some(new_headers),
+  ))
 }
 
 /// Function to set custom escaper (character that wraps the value if its'
@@ -197,6 +293,132 @@ pub fn set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a) {
   Formatter(..parser, escape_all: escape_all)
 }
 
+// => Execution Functions
+
+/// Execution function that takes in a `Formatter(a)` as well as a `List(#(String, String))`,
+/// and uses the configured separators and escapers to format the provided metadata and
+/// headers into a String, and updating the `Formatter` to avoid duplicating headers when
+/// it is passed into the [`format.run`](format.html#run) function.
+/// 
+/// The `List` being passed in should follow the structure one would use to create a `dict`
+/// - that being, the first `String` of the tuple is the key, and the second is the value.
+/// 
+/// All of the configuration options need to be set when building the `Formatter`, so this
+/// function should be very simple to understand.
+/// 
+/// After calling this function, you can also use the [`format.then`](format.html#then)
+/// function to cleanly call the [`run`](format.html#run) function instead of having to
+/// deconstruct the output tuple yourself.
+/// 
+pub fn preprocess(
+  formatter: Formatter(a),
+  metadata: List(#(String, String)),
+) -> #(Formatter(a), String) {
+  case metadata {
+    [] -> #(formatter, "")
+    non_empty -> {
+      let metadata =
+        non_empty
+        |> list.map(make_metadata_formatter(formatter))
+        |> string.join("")
+        |> wrap(in: "---" <> formatter.row_separator)
+      case formatter.column_data.1 {
+        Some(headers) -> {
+          let row =
+            headers
+            |> list.map(make_ensafeify(formatter, Data))
+            |> string.join(formatter.column_separator)
+          #(
+            Formatter(..formatter, column_data: #(formatter.column_data.0, None)),
+            metadata <> row <> formatter.row_separator,
+          )
+        }
+        None -> #(formatter, metadata)
+      }
+    }
+  }
+}
+
+/// Helper function to use after calling the [`format.preprocess`](format.html#preprocess)
+/// function to format metadata using a configured `Formatter`. Use it just as you would
+/// the [`format.run`](format.html#run) function, just only after calling the `preprocess`.
+/// 
+pub fn then(in: #(Formatter(a), String), format: List(a)) -> String {
+  let #(formatter, string) = in
+
+  string <> run(formatter, format)
+}
+
+/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`, and encodes
+/// it into a String.
+/// 
+/// All of the configuration options need to be set when building the `Formatter`, so
+/// this function should be very simple to understand.
+/// 
+/// If you run this function without first running [`format.preprocess`](format.html#preprocess),
+/// it will still prepend the headers row to the output CSV file, if you specified them. However,
+/// if you do first call `preprocess`, then `preprocess` will be the function which adds the
+/// header row, and the returned `Formatter` will be modified to not add any headers. So,
+/// unless you discard the modified `Formatter` returned from the `preprocess` function and
+/// reuse the original one while still using the metadata `String` returned by `preprocess`,
+/// the headers will not be duplicated.
+/// 
+pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
+  let Formatter(
+    column_separator,
+    row_separator,
+    _escaper,
+    _metadata_separator,
+    _escape_all,
+    #(whitespace, maybe_headers),
+    to_string,
+  ) = formatter
+
+  case maybe_headers {
+    Some(headers) -> [headers, ..elements |> list.map(to_string)]
+    None -> elements |> list.map(to_string)
+  }
+  |> list.map(fn(values: List(String)) -> String {
+    values
+    |> list.map(make_ensafeify(formatter, Data))
+    |> string.join(column_separator)
+  })
+  |> string.join(row_separator)
+}
+
+/// > **This function is deprecated, and should be replaced with the
+///   [`format.run`](format.html#run) function.**
+/// 
+/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
+/// and encodes it into a String.
+/// 
+@deprecated("
+To simplify the API and comply with the Gleam convention, I have decided to rename the format
+function to `run`. This function is still available to call, but should be replaced if possible.
+In new code, use the `run` function.
+")
+pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
+  run(formatter, elements)
+}
+
+// ==== Private Functions ====
+
+/// Internal function that pads a `List(a)` with element `a` until the `List` is of length `c`.
+/// 
+/// If the List is already the specified length or longer, it is returned unchanged.
+/// 
+fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
+  case c {
+    // If the pad target is non-positive, exit the function immediately
+    n if n <= 0 -> l
+    // Else try to pad to the target
+    count ->
+      el
+      |> list.repeat(count - list.length(l))
+      |> list.append(l, _)
+  }
+}
+
 /// Internal helper function for creating a function that checks if a specific element needs
 /// to be escaped (wrapped in escaper, which by default is `"`) before being written to file.
 /// 
@@ -220,21 +442,6 @@ fn needs_escaping(prohibited: List(String)) -> fn(String) -> Bool {
 /// 
 fn wrap(in in: String) -> fn(String) -> String {
   fn(el: String) -> String { in <> el <> in }
-}
-
-/// > **This function is deprecated, and should be replaced with the
-///   [`format.run`](format.html#run) function.**
-/// 
-/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`,
-/// and encodes it into a String.
-/// 
-@deprecated("
-To simplify the API and comply with the Gleam convention, I have decided to rename the format
-function to `run`. This function is still available to call, but should be replaced if possible.
-In new code, use the `run` function.
-")
-pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
-  run(formatter, elements)
 }
 
 fn escapeify(formatter: Formatter(a)) -> fn(String) -> String {
@@ -282,87 +489,6 @@ fn make_ensafeify(
   }
 }
 
-/// Execution function that takes in a `Formatter(a)` as well as a `List(a)`, and encodes
-/// it into a String.
-/// 
-/// All of the configuration options need to be set when building the `Formatter`, so
-/// this function should be very simple to understand.
-/// 
-/// If you run this function without first running [`format.preprocess`](format.html#preprocess),
-/// it will still prepend the headers row to the output CSV file, if you specified them. However,
-/// if you do first call `preprocess`, then `preprocess` will be the function which adds the
-/// header row, and the returned `Formatter` will be modified to not add any headers. So,
-/// unless you discard the modified `Formatter` returned from the `preprocess` function and
-/// reuse the original one while still using the metadata `String` returned by `preprocess`,
-/// the headers will not be duplicated.
-/// 
-pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
-  let Formatter(
-    column_separator,
-    row_separator,
-    _escaper,
-    _metadata_separator,
-    _escape_all,
-    maybe_headers,
-    to_string,
-  ) = formatter
-
-  case maybe_headers {
-    Some(headers) -> [headers, ..elements |> list.map(to_string)]
-    None -> elements |> list.map(to_string)
-  }
-  |> list.map(fn(values: List(String)) -> String {
-    values
-    |> list.map(make_ensafeify(formatter, Data))
-    |> string.join(column_separator)
-  })
-  |> string.join(row_separator)
-}
-
-/// Execution function that takes in a `Formatter(a)` as well as a `List(#(String, String))`,
-/// and uses the configured separators and escapers to format the provided metadata and
-/// headers into a String, and updating the `Formatter` to avoid duplicating headers when
-/// it is passed into the [`format.run`](format.html#run) function.
-/// 
-/// The `List` being passed in should follow the structure one would use to create a `dict`
-/// - that being, the first `String` of the tuple is the key, and the second is the value.
-/// 
-/// All of the configuration options need to be set when building the `Formatter`, so this
-/// function should be very simple to understand.
-/// 
-/// After calling this function, you can also use the [`format.then`](format.html#then)
-/// function to cleanly call the [`run`](format.html#run) function instead of having to
-/// deconstruct the output tuple yourself.
-/// 
-pub fn preprocess(
-  formatter: Formatter(a),
-  metadata: List(#(String, String)),
-) -> #(Formatter(a), String) {
-  case metadata {
-    [] -> #(formatter, "")
-    non_empty -> {
-      let metadata =
-        non_empty
-        |> list.map(make_metadata_formatter(formatter))
-        |> string.join("")
-        |> wrap(in: "---" <> formatter.row_separator)
-      case formatter.headers {
-        Some(headers) -> {
-          let row =
-            headers
-            |> list.map(make_ensafeify(formatter, Data))
-            |> string.join(formatter.column_separator)
-          #(
-            Formatter(..formatter, headers: None),
-            metadata <> row <> formatter.row_separator,
-          )
-        }
-        None -> #(formatter, metadata)
-      }
-    }
-  }
-}
-
 fn make_metadata_formatter(
   formatter: Formatter(a),
 ) -> fn(#(String, String)) -> String {
@@ -373,14 +499,4 @@ fn make_metadata_formatter(
     <> ensafeify(metadata.1)
     <> formatter.row_separator
   }
-}
-
-/// Helper function to use after calling the [`format.preprocess`](format.html#preprocess)
-/// function to format metadata using a configured `Formatter`. Use it just as you would
-/// the [`format.run`](format.html#run) function, just only after calling the `preprocess`.
-/// 
-pub fn then(in: #(Formatter(a), String), format: List(a)) -> String {
-  let #(formatter, string) = in
-
-  string <> run(formatter, format)
 }

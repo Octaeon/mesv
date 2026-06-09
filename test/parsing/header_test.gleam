@@ -1,3 +1,5 @@
+import gleam/pair
+import gleam/result
 import gleam/string
 import mesv/parse.{
   DataUnescapedEscapers, FailedHeaderParsing, HeadersMismatch,
@@ -17,7 +19,7 @@ pub fn old_header_behaviour_normal_test() -> Nil {
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data())
     as "Parsing default parameters | Old header behaviour"
@@ -34,7 +36,7 @@ pub fn old_header_behaviour_error_test() -> Nil {
       "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed
     == Error(
@@ -54,7 +56,7 @@ pub fn default_skip_normal_test() -> Nil {
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data())
     as "Parsing default parameters | Headers, Skip correct CSV"
@@ -71,7 +73,7 @@ pub fn default_skip_empty_row_test() -> Nil {
       "\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data()) as
     // When Ignoring a row, no need to check if there are enough columns or anything
@@ -90,7 +92,7 @@ pub fn default_skip_empty_row_strict_columns_test() -> Nil {
       "\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data()) as
     // When Ignoring a row, no need to check if there are enough columns or anything
@@ -109,7 +111,7 @@ pub fn default_skip_malformed_test() -> Nil {
       <> "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed
     == Error(
@@ -134,7 +136,7 @@ pub fn default_ordered_exact_pass_test() -> Nil {
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data())
     as "Parsing default parameters | Headers, InOrderExact pass"
@@ -151,7 +153,7 @@ pub fn default_ordered_exact_fail_test() -> Nil {
       "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed
     == Error(
@@ -181,7 +183,7 @@ pub fn default_unordered_exact_pass_test() -> Nil {
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data())
     as "Parsing default parameters | Headers, HeadersMustContain pass"
@@ -200,7 +202,7 @@ pub fn default_unordered_exact_fail_test() -> Nil {
       "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed
     == Error(
@@ -226,7 +228,7 @@ pub fn default_ordered_match_pass_test() -> Nil {
       "NaMe,AgE,CoMmEnT\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data())
     as "Parsing default parameters | Headers, InOrderMustPass pass"
@@ -249,7 +251,7 @@ pub fn default_ordered_match_fail_test() -> Nil {
       "name.,Age,COMMENT\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed
     == Error(
@@ -277,7 +279,7 @@ pub fn default_unordered_match_pass_test() -> Nil {
       "NaMe,CoMmEnT,AgE\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data())
     as "Parsing default parameters | Headers, HeadersMustContainPassing pass"
@@ -300,7 +302,7 @@ pub fn default_unordered_match_fail_test() -> Nil {
       "name.,comment|age,aGe\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed
     == Error(
@@ -329,7 +331,7 @@ pub fn default_header_expectation_transform_lowercase_test() -> Nil {
       "NAME,AGE,COMMENT\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data()) as
     // Impossible to test for equality between objects containing functions
@@ -353,7 +355,7 @@ pub fn default_header_expectation_transform_trim_test() -> Nil {
       "name    ,age    ,\"  comment  \"\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed == Ok(mesv_test.expected_normal_data()) as
     // Impossible to test for equality between objects containing functions
