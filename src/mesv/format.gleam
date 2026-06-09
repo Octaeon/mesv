@@ -145,27 +145,36 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
   )
 }
 
-pub fn stepped_build(f: fn(a) -> String) -> Formatter(a) {
+pub fn start(column_name: String, format_col: fn(a) -> String) -> Formatter(a) {
   Formatter(
     column_separator: ",",
     row_separator: "\n",
     escaper: "\"",
     metadata_separator: ":",
     escape_all: False,
-    column_data: #(ExactSameForAllColumns(DoNothing), None),
-    formatter: fn(value: a) -> List(String) { [f(value)] },
+    column_data: #(ExactSameForAllColumns(DoNothing), Some([column_name])),
+    formatter: fn(value: a) -> List(String) { [format_col(value)] },
   )
 }
 
 pub fn column(
   formatter: Formatter(a),
-  format: fn(a) -> String,
+  column_name: String,
+  format_col: fn(a) -> String,
 ) -> Formatter(a) {
-  Formatter(..formatter, formatter: fn(value: a) -> List(String) {
-    value
-    |> formatter.formatter()
-    |> list.append([format(value)])
-  })
+  Formatter(
+    ..formatter,
+    column_data: #(
+      ExactSameForAllColumns(DoNothing),
+      formatter.column_data.1
+        |> option.map(list.append(_, [column_name])),
+    ),
+    formatter: fn(value: a) -> List(String) {
+      value
+      |> formatter.formatter()
+      |> list.append([format_col(value)])
+    },
+  )
 }
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
