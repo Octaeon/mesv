@@ -1,5 +1,7 @@
 import gleam/int
 import gleam/list
+import gleam/pair
+import gleam/result
 import gleam/string
 import mesv
 import mesv/parse.{type Parser, Text}
@@ -67,7 +69,7 @@ pub fn default_normal_test() -> Nil {
     make_test_parser(col_sep, row_sep, esc)
     |> parse.preprocess(Text(data))
     |> parse.then()
-    |> parse.just_data()
+    |> result.map(pair.second)
 
   assert parsed
     == Ok([
