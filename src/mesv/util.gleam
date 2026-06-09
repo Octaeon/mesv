@@ -14,6 +14,8 @@
 
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/pair
+import gleam/result
 import gleam/string
 
 /// Internal helper function that traverses a list, calling the provided `merge` function on
@@ -159,7 +161,6 @@ pub fn split_on_unescaped(
   separator el: String,
   not_in escaper: String,
 ) -> fn(String) -> List(String) {
-  // Change done :)
   fn(to_split: String) -> List(String) {
     to_split
     // First split the string on the separator
@@ -173,5 +174,44 @@ pub fn split_on_unescaped(
         False -> None
       }
     })
+  }
+}
+
+pub fn take_until_unescaped(
+  separator el: String,
+  not_in escaper: String,
+) -> fn(String) -> Result(#(String, String), String) {
+  fn(source: String) -> Result(#(String, String), String) {
+    take_until_unescaped_loop(source, el, escaper, None)
+    |> result.map(pair.swap)
+    |> result.map_error(fn(_) { source })
+  }
+}
+
+fn take_until_unescaped_loop(
+  from: String,
+  separator: String,
+  esc: String,
+  acc: option.Option(String),
+) -> Result(#(String, String), Nil) {
+  case string.split_once(from, on: separator) {
+    Ok(#(head, rest)) -> {
+      let value = case acc {
+        Some(s) -> s <> separator <> head
+        None -> head
+      }
+      case count_non_overlapping(in: value, of: esc) % 2 == 0 {
+        True -> Ok(#(value, rest))
+        False ->
+          take_until_unescaped_loop(
+            rest,
+            separator,
+            esc,
+            // Almost made the same mistake again, lmao
+            Some(value),
+          )
+      }
+    }
+    Error(Nil) -> Error(Nil)
   }
 }

@@ -95,7 +95,6 @@
 
 import gleam/function
 import gleam/list
-import gleam/option.{None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
@@ -1177,50 +1176,11 @@ fn make_header_processor(
   }
 }
 
-fn take_until_unescaped(
-  separator el: String,
-  not_in escaper: String,
-) -> fn(String) -> Result(#(String, String), String) {
-  fn(source: String) -> Result(#(String, String), String) {
-    take_until_unescaped_loop(source, el, escaper, None)
-    |> result.map(pair.swap)
-    |> result.map_error(fn(_) { source })
-  }
-}
-
-fn take_until_unescaped_loop(
-  from: String,
-  separator: String,
-  esc: String,
-  acc: option.Option(String),
-) -> Result(#(String, String), Nil) {
-  case string.split_once(from, on: separator) {
-    Ok(#(head, rest)) -> {
-      let value = case acc {
-        Some(s) -> s <> separator <> head
-        None -> head
-      }
-      case util.count_non_overlapping(in: value, of: esc) % 2 == 0 {
-        True -> Ok(#(value, rest))
-        False ->
-          take_until_unescaped_loop(
-            rest,
-            separator,
-            esc,
-            // Almost made the same mistake again, lmao
-            Some(value),
-          )
-      }
-    }
-    Error(Nil) -> Error(Nil)
-  }
-}
-
 fn make_row_stream(parser: Parser(a, e)) -> fn(String) -> Stream(String) {
   fn(source: String) -> Stream(String) {
     stream.from_divider(
       source,
-      take_until_unescaped(parser.row_separator, parser.escaper),
+      util.take_until_unescaped(parser.row_separator, parser.escaper),
     )
   }
 }
@@ -1373,15 +1333,23 @@ fn make_metadata_parser(
 ) -> fn(String) -> Result(#(String, String), Nil) {
   let unescape = make_unescaper(parser)
   fn(row: String) -> Result(#(String, String), Nil) {
-    case take_until_unescaped_loop(row, ":", parser.escaper, None) {
-      Ok(#(key, value)) -> {
+    case util.split_on_unescaped(separator: ":", not_in: parser.escaper)(row) {
+      // Ok(#(key, value)) -> {
+      //   case unescape(key), unescape(value) {
+      //     Ok(unescaped_key), Ok(unescaped_value) ->
+      //       Ok(#(unescaped_key, unescaped_value))
+      //     _, _ -> Error(Nil)
+      //   }
+      // }
+      // Error(_) -> Error(Nil)
+      [] -> todo
+      [el] -> todo
+      [key, value] ->
         case unescape(key), unescape(value) {
-          Ok(unescaped_key), Ok(unescaped_value) ->
-            Ok(#(unescaped_key, unescaped_value))
-          _, _ -> Error(Nil)
+          Ok(_), _ -> todo
+          Error(_), _ -> todo
         }
-      }
-      Error(Nil) -> Error(Nil)
+      [_, _, ..] -> todo
     }
   }
 }
