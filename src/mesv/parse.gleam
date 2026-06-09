@@ -166,6 +166,9 @@ pub type PreprocessingError {
 /// They are returned only when calling the [`parse.preprocess`](parse.html#preprocess) function.
 /// 
 pub type MetadataRowError {
+  /// One of the rows was somehow empty. WTF?
+  /// 
+  EmptyRowWhenSplit(row: String)
   /// When trying to parse a row into a `key` and `value` on a metadata separator, the row
   /// didn't contain any separators.
   /// 
@@ -175,12 +178,16 @@ pub type MetadataRowError {
   /// When trying to parse a row by splitting it on unescaped separators, it was split into
   /// more than two Substrings, meaning that there was more than one unescaped separator.
   /// 
-  UnescapedSeparators(field: String)
+  UnescapedSeparators(key: String, value: String, rest: List(String))
   /// When trying to parse a row, after separating it into a `key` and `value`, this field
   /// was found to be malformed, due to being flanked only on one end by escapers, but not
   /// on the other.
   /// 
   /// TODO : Verify if this is true, I don't exactly remember and I need to go to sleep rn
+  MetadataMismatchedEscapers(field: String)
+  /// When trying to parse a row, one of the fields was not surrounded by escapers, but had
+  /// an escaper within it.
+  /// 
   MetadataUnescapedEscapers(field: String)
   /// When trying to parse a row, after separating it into a `key` and `value`, this field
   /// was found to have an non-duplicated escapers inside of it.
@@ -758,12 +765,13 @@ pub fn preprocess(
   #(List(#(String, String)), Parser(a, e), CsvSource),
   PreprocessingError,
 ) {
-  let #(row_stream, metadata) =
+  use #(row_stream, metadata) <- result.try(
     case source {
       Text(str) -> make_row_stream(parser)(str)
       RowStream(stream) -> stream
     }
-    |> read_metadata(make_metadata_parser(parser))
+    |> make_metadata_reader(parser),
+  )
 
   let process_headers = make_header_processor(parser)
 
@@ -988,6 +996,9 @@ fn drop(from: List(c), count: Int) -> Result(List(c), Nil) {
 
 /// Internal helper function to check whether the CSV headers that were found match
 /// the expected pattern that was specified in the Parser building process.
+/// 
+/// This function MUST go. It's **86 LINES** long, and much of the expressions
+/// in the case pattern matching are identical.
 /// 
 fn make_header_processor(
   parser: Parser(a, e),
@@ -1236,7 +1247,7 @@ fn make_unescaper(
   // Unescape the String - for now, just deduplicate the escaper characters
   // (According to the CSV format standard, if any doubleQuotes appear inside a cell,
   // they must be replaced with two of them, and the entire cell wrapped)
-  let deduplicate = fn(cell: String) -> String {
+  let unescape = fn(cell: String) -> String {
     cell
     |> string.remove_prefix(escaper)
     |> string.remove_suffix(escaper)
@@ -1272,7 +1283,7 @@ fn make_unescaper(
     case num_single, starts(trimmed), ends(trimmed) {
       n, True, True if n % 2 == 0 && n == num_duplicated * 2 ->
         // If it was even and wrapped in escapers, remove them along with the whitespace wrapping the cell
-        Ok(deduplicate(trimmed))
+        Ok(unescape(trimmed))
       n, False, False if n == 0 && num_duplicated == 0 -> Ok(cell)
       _, a, b if a != b -> Error(DataMismatchedEscapers(trimmed))
       n, False, False if n != 0 -> Error(DataUnescapedEscapers(trimmed))
@@ -1312,44 +1323,83 @@ fn make_finalizer(
   }
 }
 
-fn read_metadata(
-  rows: Stream(String),
-  parse_metadata_row: fn(String) -> Result(#(String, String), Nil),
-) -> #(Stream(String), List(#(String, String))) {
-  case stream.next(rows) {
-    Next(stream, "---") -> {
-      stream
-      |> stream.collect_until(fn(row: String) -> Bool { row == "---" })
-      |> pair.map_second(list.filter_map(_, parse_metadata_row))
-      |> pair.map_first(stream.drop(_, 1))
+fn make_metadata_reader(
+  parser: Parser(a, e),
+) -> fn(Stream(String)) ->
+  Result(#(Stream(String), List(#(String, String))), PreprocessingError) {
+  let metadata_parser = make_metadata_parser(parser)
+  fn(rows: Stream(String)) {
+    case stream.next(rows) {
+      Next(stream, "---") -> {
+        let #(stream, metadata_results) =
+          stream
+          |> stream.collect_until(fn(row: String) -> Bool { row == "---" })
+          |> pair.map_second(list.map(_, metadata_parser))
+          |> pair.map_first(stream.drop(_, 1))
+
+        result.all(metadata_results)
+        |> result.map_error(fn(_) {
+          metadata_results
+          |> list.filter_map(fn(r) {
+            case r {
+              Ok(_) -> Error(Nil)
+              Error(err) -> Ok(err)
+            }
+          })
+          |> MetadataParsing
+        })
+        |> result.map(fn(metadata) { #(stream, metadata) })
+      }
+      Next(stream, row) -> Ok(#(stream.prepend(stream, row), []))
+      Done -> Ok(#(stream.empty(), []))
     }
-    Next(stream, row) -> #(stream.prepend(stream, row), [])
-    Done -> #(stream.empty(), [])
   }
 }
 
 fn make_metadata_parser(
   parser: Parser(a, e),
-) -> fn(String) -> Result(#(String, String), Nil) {
+) -> fn(String) -> Result(#(String, String), MetadataRowError) {
   let unescape = make_unescaper(parser)
-  fn(row: String) -> Result(#(String, String), Nil) {
+  fn(row: String) -> Result(#(String, String), MetadataRowError) {
     case util.split_on_unescaped(separator: ":", not_in: parser.escaper)(row) {
-      // Ok(#(key, value)) -> {
-      //   case unescape(key), unescape(value) {
-      //     Ok(unescaped_key), Ok(unescaped_value) ->
-      //       Ok(#(unescaped_key, unescaped_value))
-      //     _, _ -> Error(Nil)
-      //   }
-      // }
-      // Error(_) -> Error(Nil)
-      [] -> todo
-      [el] -> todo
+      [] -> Error(EmptyRowWhenSplit(row))
+      [_] -> Error(NoSeparator(row))
       [key, value] ->
         case unescape(key), unescape(value) {
-          Ok(_), _ -> todo
-          Error(_), _ -> todo
+          Ok(unescaped_key), Ok(unescaped_value) ->
+            Ok(#(unescaped_key, unescaped_value))
+          Ok(_), Error(err) -> Error(data_row_to_metadata_row(err))
+          Error(err), _ -> Error(data_row_to_metadata_row(err))
         }
-      [_, _, ..] -> todo
+      [key, value, ..rest] -> Error(UnescapedSeparators(key, value, rest))
     }
+  }
+}
+
+fn data_row_to_metadata_row(err: DataRowError(e)) -> MetadataRowError {
+  case err {
+    DataUnescapedEscapers(field) -> MetadataUnescapedEscapers(field)
+    DataMismatchedEscapers(field) -> MetadataMismatchedEscapers(field)
+    DataNonDuplicatedEscapers(field) -> MetadataNonDuplicatedEscapers(field)
+    NotEnoughCells ->
+      NoSeparator("Created by converting from DataRowError `NotEnoughCells`")
+    TooManyCells(leftovers) ->
+      UnescapedSeparators("dummy key", "dummy value", leftovers)
+    CellParsingFailed(reason, _) ->
+      NoSeparator(
+        "Created by converting from DataRowError `CellParsingFailed`. Reason: "
+        <> reason,
+      )
+  }
+}
+
+fn list_to_string(l: List(a), to_str: fn(a) -> String) -> String {
+  case l {
+    [] -> "[ Empty ]"
+    non_empty ->
+      non_empty
+      |> list.map(fn(s) { "\"" <> to_str(s) <> "\"" })
+      |> string.join(", ")
+      |> fn(s) { "[ " <> s <> " ]" }
   }
 }
