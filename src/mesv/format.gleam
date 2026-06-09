@@ -81,7 +81,7 @@ pub opaque type Formatter(a) {
     escaper: String,
     metadata_separator: String,
     escape_all: Bool,
-    headers: Option(List(String)),
+    column_data: #(List(WhitespaceBehaviour), Option(List(String))),
     formatter: fn(a) -> List(String),
   )
 }
@@ -89,6 +89,14 @@ pub opaque type Formatter(a) {
 type EscapeWhich {
   Metadata
   Data
+}
+
+pub type WhitespaceBehaviour {
+  DoNothing
+  TrimAll
+  TrimStart
+  LeftAlignPad(to: Int)
+  RightAlignPad(to: Int)
 }
 
 /// Function for directly building a `Formatter` that outputs the specified
@@ -126,7 +134,7 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
     escaper: "\"",
     metadata_separator: ":",
     escape_all: False,
-    headers: None,
+    column_data: #([], None),
     formatter: f,
   )
 }
@@ -164,7 +172,10 @@ pub fn set_headers(
   formatter: Formatter(a),
   new_headers: List(String),
 ) -> Formatter(a) {
-  Formatter(..formatter, headers: Some(new_headers))
+  Formatter(..formatter, column_data: #(
+    formatter.column_data.0,
+    Some(new_headers),
+  ))
 }
 
 /// Function to set custom escaper (character that wraps the value if its'
@@ -303,7 +314,7 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
     _escaper,
     _metadata_separator,
     _escape_all,
-    maybe_headers,
+    #(whitespace, maybe_headers),
     to_string,
   ) = formatter
 
@@ -346,14 +357,14 @@ pub fn preprocess(
         |> list.map(make_metadata_formatter(formatter))
         |> string.join("")
         |> wrap(in: "---" <> formatter.row_separator)
-      case formatter.headers {
+      case formatter.column_data.1 {
         Some(headers) -> {
           let row =
             headers
             |> list.map(make_ensafeify(formatter, Data))
             |> string.join(formatter.column_separator)
           #(
-            Formatter(..formatter, headers: None),
+            Formatter(..formatter, column_data: #(formatter.column_data.0, None)),
             metadata <> row <> formatter.row_separator,
           )
         }
