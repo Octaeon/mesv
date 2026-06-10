@@ -93,6 +93,7 @@
 //// ```
 //// 
 
+import gleam/bit_array
 import gleam/float
 import gleam/function
 import gleam/int
@@ -1048,7 +1049,47 @@ pub fn integer(val: String) -> Result(Int, ValueError) {
   val
   |> string.trim()
   |> int.parse()
-  |> result.map_error(fn(_) { ValueError(val, "Integer", None) })
+  |> result.map_error(fn(_) { ValueError(val, "Integer, Base 10", None) })
+}
+
+pub fn integer_hex(val: String) -> Result(Int, ValueError) {
+  val
+  |> string.trim()
+  |> int.base_parse(16)
+  |> result.map_error(fn(_) { ValueError(val, "Integer, Base 16", None) })
+}
+
+pub fn integer_binary(val: String) -> Result(Int, ValueError) {
+  val
+  |> string.trim()
+  |> int.base_parse(2)
+  |> result.map_error(fn(_) { ValueError(val, "Integer, Base 2", None) })
+}
+
+/// The `int.base_parse` gleam stdlib function used in this function works only for bases
+/// greater than 1, and lower than 37. So anything from 2 to 36.
+/// 
+/// Therefore, if a base Int outside of these bounds is passed into this function, it will
+/// panic before returning any value.
+/// 
+/// ### Note
+/// If you are of the opinion that this behaviour should be different, you're welcome to
+/// copy the function code and remove the panic, or create an Issue on the GitHub repository.
+/// 
+pub fn integer_arbitrary_base(
+  base: Int,
+) -> fn(String) -> Result(Int, ValueError) {
+  case base {
+    b if b < 2 || b > 36 -> panic
+    b -> fn(val: String) -> Result(Int, ValueError) {
+      val
+      |> string.trim()
+      |> int.base_parse(b)
+      |> result.map_error(fn(_) {
+        ValueError(val, "Integer, Base " <> int.to_string(b), None)
+      })
+    }
+  }
 }
 
 pub fn float(val: String) -> Result(Float, ValueError) {
@@ -1103,6 +1144,17 @@ pub fn char(val: String) -> Result(String, ValueError) {
       ))
   }
 }
+
+// pub fn array(
+//   parser: fn(String) -> Result(a, ValueError),
+// ) -> fn(String) -> Result(List(a), ValueError) {
+//   fn(cell: String) {
+//     let cleaned = string.trim(cell)
+//     let _ = 1
+
+//     todo
+//   }
+// }
 
 // ==== Private Functions ====
 
