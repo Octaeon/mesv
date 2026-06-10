@@ -23,11 +23,16 @@ pub fn integer_base_10_test() -> Nil {
     )),
     Error(CellParsingFailed(
       "1.2",
-      ValueError("1.2", ["Integer base 10"], [None], None),
+      ValueError(
+        "1.2",
+        ["Integer base 10"],
+        [Some("For floating point numbers, use parse.float")],
+        None,
+      ),
     )),
     Error(CellParsingFailed(
       "",
-      ValueError("", ["Integer base 10"], [None], None),
+      ValueError("", ["Integer base 10"], [Some("Cell was empty")], None),
     )),
   ]
 
@@ -68,7 +73,12 @@ pub fn integer_base_16_test() -> Nil {
     Ok(15),
     Error(CellParsingFailed(
       "1.f",
-      ValueError("1.f", ["Integer base 16"], [None], None),
+      ValueError(
+        "1.f",
+        ["Integer base 16"],
+        [Some("For floating point numbers, use parse.float")],
+        None,
+      ),
     )),
   ]
 
@@ -91,7 +101,12 @@ pub fn integer_arbitrary_base_test() -> Nil {
     )),
     Error(CellParsingFailed(
       "1.0",
-      ValueError("1.0", ["Integer base 7"], [None], None),
+      ValueError(
+        "1.0",
+        ["Integer base 7"],
+        [Some("For floating point numbers, use parse.float")],
+        None,
+      ),
     )),
   ]
 
@@ -119,7 +134,10 @@ pub fn float_test() -> Nil {
         None,
       ),
     )),
-    Error(CellParsingFailed("", ValueError("", ["Float"], [None], None))),
+    Error(CellParsingFailed(
+      "",
+      ValueError("", ["Float"], [Some("Cell was empty")], None),
+    )),
   ]
 
   assert parsed == expected as "Parsing Primitives | Float"
@@ -160,7 +178,10 @@ pub fn character_test() -> Nil {
         None,
       ),
     )),
-    Error(CellParsingFailed("", ValueError("", ["Char"], [Some("Empty")], None))),
+    Error(CellParsingFailed(
+      "",
+      ValueError("", ["Char"], [Some("Cell was empty")], None),
+    )),
   ]
 
   assert parsed == expected as "Parsing Primitives | Integer, base 10"
@@ -181,7 +202,12 @@ pub fn optional_test() -> Nil {
     )),
     Error(CellParsingFailed(
       "1.2",
-      ValueError("1.2", ["Integer base 10"], [None], None),
+      ValueError(
+        "1.2",
+        ["Integer base 10"],
+        [Some("For floating point numbers, use parse.float")],
+        None,
+      ),
     )),
   ]
 
@@ -214,12 +240,17 @@ pub fn map_test() -> Nil {
     Ok(False),
     Error(CellParsingFailed(
       "",
-      ValueError("", ["Integer base 10"], [None], None),
+      ValueError("", ["Integer base 10"], [Some("Cell was empty")], None),
     )),
     Ok(True),
     Error(CellParsingFailed(
       "21.2",
-      ValueError("21.2", ["Integer base 10"], [None], None),
+      ValueError(
+        "21.2",
+        ["Integer base 10"],
+        [Some("For floating point numbers, use parse.float")],
+        None,
+      ),
     )),
     Error(CellParsingFailed(
       "a",
