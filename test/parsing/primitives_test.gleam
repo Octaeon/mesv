@@ -8,8 +8,6 @@ import gleam/option.{None, Some}
 import mesv/parse.{CellParsingFailed, Text, ValueError}
 
 // Test:
-// - Strings (normal)
-// - Optional values
 // - Mapping parsers
 // - Lists
 // - Nested Lists
@@ -18,7 +16,7 @@ pub fn integer_base_10_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(parse.integer)
-    |> parse.run(Text("1\n2\na\n1.2"))
+    |> parse.run(Text("1\n2\na\n1.2\n"))
 
   let expected = [
     Ok(1),
@@ -30,6 +28,10 @@ pub fn integer_base_10_test() -> Nil {
     Error(CellParsingFailed(
       "1.2",
       ValueError("1.2", ["Integer base 10"], [None], None),
+    )),
+    Error(CellParsingFailed(
+      "",
+      ValueError("", ["Integer base 10"], [None], None),
     )),
   ]
 
@@ -104,7 +106,7 @@ pub fn float_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(parse.float)
-    |> parse.run(Text("1\n10\n100.1\n1.f\n.00001\n.10.0"))
+    |> parse.run(Text("1\n10\n100.1\n1.f\n.00001\n.10.0\n"))
 
   let expected = [
     Ok(1.0),
@@ -121,6 +123,7 @@ pub fn float_test() -> Nil {
         None,
       ),
     )),
+    Error(CellParsingFailed("", ValueError("", ["Float"], [None], None))),
   ]
 
   assert parsed == expected as "Parsing Primitives | Float"
@@ -165,4 +168,42 @@ pub fn character_test() -> Nil {
   ]
 
   assert parsed == expected as "Parsing Primitives | Integer, base 10"
+}
+
+pub fn optional_test() -> Nil {
+  let parsed =
+    parse.build(function.identity)
+    |> parse.column(parse.integer |> parse.option())
+    |> parse.run(Text("1\n\na\n1.2"))
+
+  let expected = [
+    Ok(Some(1)),
+    Ok(None),
+    Error(CellParsingFailed(
+      "a",
+      ValueError("a", ["Integer base 10"], [None], None),
+    )),
+    Error(CellParsingFailed(
+      "1.2",
+      ValueError("1.2", ["Integer base 10"], [None], None),
+    )),
+  ]
+
+  assert parsed == expected as "Parsing Primitives | Optional parsing"
+}
+
+pub fn attempt_test() -> Nil {
+  let parsed =
+    parse.build(function.identity)
+    |> parse.column(parse.integer |> parse.attempt())
+    |> parse.run(Text("1\n\na\n1.2"))
+
+  let expected = [
+    Ok(Some(1)),
+    Ok(None),
+    Ok(None),
+    Ok(None),
+  ]
+
+  assert parsed == expected as "Parsing Primitives | Attempt parsing"
 }
