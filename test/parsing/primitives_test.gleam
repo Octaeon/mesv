@@ -4,12 +4,10 @@
 //// 
 
 import gleam/function
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import mesv/parse.{CellParsingFailed, Text, ValueError}
 
 // Test:
-// - Float
-// - Characters
 // - Strings (normal)
 // - Optional values
 // - Mapping parsers
@@ -106,18 +104,65 @@ pub fn float_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(parse.float)
-    |> parse.run(Text("1\n10\n100.1\n1.f\n.00001"))
+    |> parse.run(Text("1\n10\n100.1\n1.f\n.00001\n.10.0"))
 
   let expected = [
     Ok(1.0),
     Ok(10.0),
     Ok(100.1),
     Error(CellParsingFailed("1.f", ValueError("1.f", ["Float"], [None], None))),
+    Ok(0.00001),
     Error(CellParsingFailed(
-      ".00001",
-      ValueError(".00001", ["Float"], [None], None),
+      ".10.0",
+      ValueError(
+        ".10.0",
+        ["Float"],
+        [Some("Found 3 dots in cell; Only 0 or 1 are allowed.")],
+        None,
+      ),
     )),
   ]
 
   assert parsed == expected as "Parsing Primitives | Float"
+}
+
+pub fn character_test() -> Nil {
+  let parsed =
+    parse.build(function.identity)
+    |> parse.column(parse.char)
+    |> parse.run(Text(
+      "1\n2\na\n1.2\nthere can be whitespace\n   !   \nIt's just trimmed\n",
+    ))
+
+  let expected = [
+    Ok("1"),
+    Ok("2"),
+    Ok("a"),
+    Error(CellParsingFailed(
+      "1.2",
+      ValueError("1.2", ["Char"], [Some("Multiple characters")], None),
+    )),
+    Error(CellParsingFailed(
+      "there can be whitespace",
+      ValueError(
+        "there can be whitespace",
+        ["Char"],
+        [Some("Multiple characters")],
+        None,
+      ),
+    )),
+    Ok("!"),
+    Error(CellParsingFailed(
+      "It's just trimmed",
+      ValueError(
+        "It's just trimmed",
+        ["Char"],
+        [Some("Multiple characters")],
+        None,
+      ),
+    )),
+    Error(CellParsingFailed("", ValueError("", ["Char"], [Some("Empty")], None))),
+  ]
+
+  assert parsed == expected as "Parsing Primitives | Integer, base 10"
 }
