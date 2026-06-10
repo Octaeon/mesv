@@ -5,12 +5,8 @@
 
 import gleam/function
 import gleam/option.{None, Some}
+import gleam/string
 import mesv/parse.{CellParsingFailed, Text, ValueError}
-
-// Test:
-// - Mapping parsers
-// - Lists
-// - Nested Lists
 
 pub fn integer_base_10_test() -> Nil {
   let parsed =
@@ -206,4 +202,180 @@ pub fn attempt_test() -> Nil {
   ]
 
   assert parsed == expected as "Parsing Primitives | Attempt parsing"
+}
+
+pub fn map_test() -> Nil {
+  let parsed =
+    parse.build(function.identity)
+    |> parse.column(parse.integer |> parse.map(fn(i) { i >= 18 }))
+    |> parse.run(Text("1\n\n20\n21.2\na\n\"I'm an adult, I swear!\""))
+
+  let expected = [
+    Ok(False),
+    Error(CellParsingFailed(
+      "",
+      ValueError("", ["Integer base 10"], [None], None),
+    )),
+    Ok(True),
+    Error(CellParsingFailed(
+      "21.2",
+      ValueError("21.2", ["Integer base 10"], [None], None),
+    )),
+    Error(CellParsingFailed(
+      "a",
+      ValueError("a", ["Integer base 10"], [None], None),
+    )),
+    Error(CellParsingFailed(
+      "I'm an adult, I swear!",
+      ValueError("I'm an adult, I swear!", ["Integer base 10"], [None], None),
+    )),
+  ]
+
+  assert parsed == expected as "Parsing Primitives | 'Map' transformation"
+}
+
+pub fn try_test() -> Nil {
+  let parsed =
+    parse.build(function.identity)
+    |> parse.column(
+      parse.string
+      |> parse.try(string.split_once(_, on: " ")),
+    )
+    |> parse.run(Text("nope\nno_spaces_here\nokay have_one\nmaybe even two"))
+
+  let expected = [
+    Error(CellParsingFailed("nope", Nil)),
+    Error(CellParsingFailed("no_spaces_here", Nil)),
+    Ok(#("okay", "have_one")),
+    Ok(#("maybe", "even two")),
+  ]
+
+  assert parsed == expected as "Parsing Primitives | 'Try' transformation"
+}
+
+pub fn list_basic_test() -> Nil {
+  let parsed =
+    parse.build(function.identity)
+    |> parse.column(
+      parse.bool(False)
+      |> parse.array(#("[", "]"), "."),
+    )
+    |> parse.run(Text(
+      "[true.false.true]\n[no.yes]\n[1.1.1.1]\n[True.1.False.0.Yes.NO]",
+    ))
+
+  let expected = [
+    Ok([True, False, True]),
+    Ok([False, True]),
+    Ok([True, True, True, True]),
+    Ok([True, True, False, False, True, False]),
+  ]
+
+  assert parsed == expected as "Parsing Primitives | List, basic"
+}
+
+pub fn list_basic_strict_test() -> Nil {
+  let parsed =
+    parse.build(function.identity)
+    |> parse.column(
+      parse.bool(True)
+      |> parse.array(#("[", "]"), "."),
+    )
+    |> parse.run(Text(
+      "[true.false.true]\n[no.yes]\n[1.1.1.1]\n[True.1.False.0.Yes.NO]",
+    ))
+
+  let expected = [
+    Ok([True, False, True]),
+    Error(CellParsingFailed(
+      "[no.yes]",
+      ValueError(
+        "[no.yes]",
+        ["Array", "Bool: Strict"],
+        [Some("Failed using parser [ \"Bool: Strict\" ] on element [no]"), None],
+        None,
+      ),
+    )),
+    Error(CellParsingFailed(
+      "[1.1.1.1]",
+      ValueError(
+        "[1.1.1.1]",
+        ["Array", "Bool: Strict"],
+        [Some("Failed using parser [ \"Bool: Strict\" ] on element [1]"), None],
+        None,
+      ),
+    )),
+    Error(CellParsingFailed(
+      "[True.1.False.0.Yes.NO]",
+      ValueError(
+        "[True.1.False.0.Yes.NO]",
+        ["Array", "Bool: Strict"],
+        [Some("Failed using parser [ \"Bool: Strict\" ] on element [1]"), None],
+        None,
+      ),
+    )),
+  ]
+
+  assert parsed == expected as "Parsing Primitives | List, basic strict"
+}
+
+pub fn list_basic_errors_test() -> Nil {
+  let parsed =
+    parse.build(function.identity)
+    |> parse.column(
+      parse.bool(False)
+      |> parse.array(#("[", "]"), "."),
+    )
+    |> parse.run(Text("[  true.  false  .  true  ]\ntrue.true.true\n[.true]"))
+
+  let expected = [
+    Ok([True, False, True]),
+    Error(CellParsingFailed(
+      "true.true.true",
+      ValueError(
+        "true.true.true",
+        ["Array"],
+        [Some("Wasn't wrapped in delimiters [ ]")],
+        None,
+      ),
+    )),
+    Error(CellParsingFailed(
+      "[.true]",
+      ValueError(
+        "[.true]",
+        ["Array", "Bool: Relaxed"],
+        [Some("Failed using parser [ \"Bool: Relaxed\" ] on element []"), None],
+        None,
+      ),
+    )),
+  ]
+
+  assert parsed == expected as "Parsing Primitives | List, basic errors"
+}
+
+pub fn list_composite_parser_test() -> Nil {
+  let parsed =
+    parse.build(function.identity)
+    |> parse.column(
+      parse.bool(True)
+      |> parse.attempt()
+      |> parse.array(#("[", "]"), "."),
+    )
+    |> parse.run(Text("[  true.  false  .  true  ]\ntrue.true.true\n[.true]"))
+
+  let expected = [
+    Ok([Some(True), Some(False), Some(True)]),
+    Error(CellParsingFailed(
+      "true.true.true",
+      ValueError(
+        "true.true.true",
+        ["Array"],
+        [Some("Wasn't wrapped in delimiters [ ]")],
+        None,
+      ),
+    )),
+    Ok([None, Some(True)]),
+  ]
+
+  assert parsed == expected as "Parsing Primitives | List, composite parsers"
 }
