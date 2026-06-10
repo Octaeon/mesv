@@ -1029,8 +1029,22 @@ pub fn just_data(
 
 // => Utility parser functions
 
+/// The default `Error` type for the parsing primitives.
+/// 
+/// It contains the full contents of the cell that failed to parse, the name of the parser
+/// used, as well as a generic `additional_context` field inside of an `Option`.
+/// 
+/// All of the parsing primitives return a `ValueError` that is unspecialised, as the
+/// `additional_context` field is set to `None`. Thus, they will work with any specialised
+/// `ValueError` type you create without any additional code required.
+/// 
 pub type ValueError(e) {
-  ValueError(cell: String, parser: String, additional_context: Option(e))
+  ValueError(
+    cell: String,
+    path: List(String),
+    reasons: List(Option(String)),
+    additional_context: Option(e),
+  )
 }
 
 pub fn make_primitive(
@@ -1040,7 +1054,7 @@ pub fn make_primitive(
   fn(val: String) {
     val
     |> func()
-    |> result.map_error(fn(err) { ValueError(val, name, Some(err)) })
+    |> result.map_error(fn(err) { ValueError(val, [name], [None], Some(err)) })
   }
 }
 
@@ -1076,20 +1090,23 @@ pub fn integer_arbitrary_base(
       |> string.trim()
       |> int.base_parse(b)
       |> result.map_error(fn(_) {
-        ValueError(val, "Integer: Base " <> int.to_string(b), None)
+        ValueError(val, ["Integer base " <> int.to_string(b)], [None], None)
       })
     }
   }
 }
 
+/// Primitive parser for a float value, along with a corresponding error message.
+/// 
 pub fn float(val: String) -> Result(Float, ValueError(_)) {
   val
   |> string.trim()
   |> float.parse()
-  |> result.map_error(fn(_) { ValueError(val, "Float", None) })
+  |> result.map_error(fn(_) { ValueError(val, ["Float"], [None], None) })
 }
 
-/// Curried function. If strict, only the words `true` and `false` will successfully parse into a `Bool` value.
+/// Curried function. If strict, only the words `true` and `false` will
+/// successfully parse into a `Bool` value.
 /// 
 /// If false, other acronyms can also be successfully parsed.
 /// 
@@ -1110,17 +1127,27 @@ pub fn bool(strict: Bool) -> fn(String) -> Result(Bool, ValueError(_)) {
       _ ->
         Error(ValueError(
           val,
-          "Bool: "
+          [
+            "Bool: "
             <> case strict {
-            True -> "Strict"
-            False -> "Relaxed"
-          },
+              True -> "Strict"
+              False -> "Relaxed"
+            },
+          ],
+          [None],
           None,
         ))
     }
   }
 }
 
+/// A cell parser that acts as a guard.
+/// 
+/// If the value of the cell equals the stated value, return `Ok(Nil)`;
+/// otherwise, return `Error(ValueError)` explaining the problem.
+/// 
+/// I'm not certain it will be useful.
+/// 
 pub fn accept_only(
   value expected: String,
 ) -> fn(String) -> Result(Nil, ValueError(_)) {
@@ -1128,24 +1155,50 @@ pub fn accept_only(
     case expected == val {
       True -> Ok(Nil)
       False ->
-        Error(ValueError(val, "Value: Is not [" <> expected <> "]", None))
+        Error(ValueError(
+          val,
+          ["Accept Only"],
+          [Some("Is not [" <> expected <> "]")],
+          None,
+        ))
     }
   }
 }
 
-pub fn string(val: String) -> Result(String, ValueError(_)) {
+/// Primitive parser for Strings. It never fails, just wraps the passed in cell in `Ok`.
+/// 
+/// It exists only because parsing Strings is definitely something people will use this
+/// library to do, and if they were to use this module of parsing primitives, seeing a
+/// random `parse.column(Ok)` might be confusing if one is not familiar with the specific
+/// structure of the `Parser`.
+/// 
+pub fn string(val: String) -> Result(String, _) {
   Ok(val)
 }
 
+/// Primitive parser for a single character.
+/// 
+/// This uses the `string.length` function to check if the length of the cell (when trimmed
+/// of whitespace) is equal to 1. If it's empty (length 0), an `Error` stating so is returned,
+/// and likewise if it's anything above 1.
+/// 
 pub fn char(val: String) -> Result(String, ValueError(_)) {
   let cleaned = string.trim(val)
   case string.length(cleaned) {
     1 -> Ok(cleaned)
-    0 -> Error(ValueError(val, "Char: Empty", None))
-    _ -> Error(ValueError(cleaned, "Char: Multiple characters", None))
+    0 -> Error(ValueError(val, ["Char"], [Some("Empty")], None))
+    _ -> Error(ValueError(val, ["Char"], [Some("Multiple characters")], None))
   }
 }
 
+/// Transform the parser's return value using the provided function.
+/// 
+/// If the parser fails, this does nothing; In essence, this is a thin wrapper around the
+/// [`result.map`](https://gleam-stdlib.hexdocs.pm/gleam/result.html#map) function from
+/// the Gleam standard library.
+/// 
+/// For functions that may fail (return a `Result`) use the `try` function.
+/// 
 pub fn map(
   parser: fn(String) -> Result(a, e),
   func: fn(a) -> b,
@@ -1157,6 +1210,37 @@ pub fn map(
   }
 }
 
+/// Transform the parser's error value using the provided function.
+/// 
+/// If the parser succeeds, this does nothing; In essence, this is a thin wrapper around the
+/// [`result.map_error`](https://gleam-stdlib.hexdocs.pm/gleam/result.html#map_error) function
+/// from the Gleam standard library.
+/// 
+/// Useful if you want to use the parsing primitives but are not satisfied with the error messages.
+/// 
+pub fn map_error(
+  parser: fn(String) -> Result(a, e),
+  func: fn(e) -> d,
+) -> fn(String) -> Result(a, d) {
+  fn(val: String) {
+    val
+    |> parser()
+    |> result.map_error(func)
+  }
+}
+
+/// If the provided parser succeeds, check if it returns `None` when passed to the
+/// predicate function.
+/// 
+/// If the function returns `None`, do nothing and pass the value along;
+/// If it returns `Some(err)`, replace the value with `Error(err)`.
+/// 
+/// Can be used to guard against specific successfully parsed values that are nevertheless
+/// incorrect for a reason other than cell structure.
+/// 
+/// If you need more granular control over the value and want to transform it somehow,
+/// use the `try` function instead.
+/// 
 pub fn require_custom(
   parser: fn(String) -> Result(a, e),
   predicate: fn(a) -> Option(e),
@@ -1173,23 +1257,50 @@ pub fn require_custom(
   }
 }
 
+/// If the provided parser succeeds, check if it passes the check.
+/// 
+/// If the function returns `True`, do nothing and pass the value along;
+/// If it returns `False`, replace the value with a generic `ValueError` message.
+/// 
+/// Can be used to guard against specific successfully parsed values that are nevertheless
+/// incorrect for a reason other than cell structure.
+/// 
+/// If you need more granular control over the returned `Error` type, use the `try` function,
+/// or the `require_custom` function instead.
+/// 
 pub fn require(
   parser: fn(String) -> Result(a, ValueError(e)),
   predicate: fn(a) -> Bool,
 ) -> fn(String) -> Result(a, ValueError(e)) {
+  let parser_name = "Require"
   fn(val: String) {
     val
     |> parser()
-    |> result.try(fn(v) {
-      case predicate(v) {
-        True -> Ok(v)
+    |> result.map_error(fn(err) {
+      let ValueError(cell, path, reasons, context) = err
+      ValueError(cell, [parser_name, ..path], [None, ..reasons], context)
+    })
+    |> result.try(fn(parsed_val) {
+      case predicate(parsed_val) {
+        True -> Ok(parsed_val)
         False ->
-          Error(ValueError(val, "Require: Didn't pass the predicate", None))
+          Error(ValueError(
+            val,
+            [parser_name],
+            [Some("Didn't pass the predicate")],
+            None,
+          ))
       }
     })
   }
 }
 
+/// If the provided parser succeeds, use the function to try and perform some operation on
+/// the value, which might fail.
+/// 
+/// Can be used to guard against specific successfully parsed values that are nevertheless
+/// incorrect for a reason other than cell structure.
+/// 
 pub fn try(
   parser: fn(String) -> Result(a, e),
   func: fn(a) -> Result(b, e),
@@ -1201,6 +1312,11 @@ pub fn try(
   }
 }
 
+/// If the provided parser fails, use the function to read the error and perform
+/// some operation on it.
+/// 
+/// Can be used to recover from failure.
+/// 
 pub fn try_recover(
   parser: fn(String) -> Result(a, e1),
   func: fn(e1) -> Result(a, e2),
@@ -1212,6 +1328,10 @@ pub fn try_recover(
   }
 }
 
+/// If the provided parser fails, replace it with the provided new value.
+/// 
+/// Can be used to recover from failure.
+/// 
 pub fn or(
   parser: fn(String) -> Result(a, e),
   default value: Result(a, e),
@@ -1239,7 +1359,7 @@ pub fn option(
   }
 }
 
-/// Try to use the provided parser.
+/// Attempt to parse this cell using the provided parser.
 /// 
 /// If it succeeds, return `Some(a)`; if it doesn't, return `None`.
 /// 
@@ -1262,44 +1382,79 @@ pub fn attempt(
 pub fn one_of(
   parsers: List(fn(String) -> Result(a, _)),
 ) -> fn(String) -> Result(a, ValueError(_)) {
+  let parser_name = "One Of"
   fn(val: String) {
     parsers
     |> list.find_map(fn(try) { try(val) })
     |> result.map_error(fn(_) {
-      ValueError(val, "One Of: No parsers succeeded", None)
+      ValueError(val, [parser_name], [Some("No parsers succeeded")], None)
     })
   }
 }
 
+/// Using the given parser, try to parse a cell as an array.
+/// 
+/// The `delimiters` argument specifies the boundaries of the cell. It has the structure
+/// `#(prefix, suffix)`. If the cell is not wrapped in them (excluding whitespace), an
+/// `Error` will be emitted. If it is, then the contents (without delimiters) are separated
+/// on the `separator`, then mapped over and parsed using the provided parser.
+/// 
+/// If all of the elements are successfully parsed, the resulting `List(a)` is returned.
+/// 
+/// If not, the first Error is wrapped in a broader Error that explains what went wrong.
+/// 
 pub fn array(
   parser: fn(String) -> Result(a, ValueError(e)),
+  delimiters: #(String, String),
+  separator: String,
 ) -> fn(String) -> Result(List(a), ValueError(e)) {
   fn(cell: String) {
     let trimmed = string.trim(cell)
-    case string.starts_with(trimmed, "[") && string.ends_with(trimmed, "]") {
+    case
+      string.starts_with(trimmed, delimiters.0)
+      && string.ends_with(trimmed, delimiters.1)
+    {
       True ->
         Ok(
           trimmed
-          |> string.remove_prefix("[")
-          |> string.remove_suffix("]")
-          |> string.split(on: ","),
+          |> string.remove_prefix(delimiters.0)
+          |> string.remove_suffix(delimiters.1)
+          |> string.split(on: separator),
         )
       False ->
-        Error(ValueError(cell, "Array: Wasn't wrapped in square brackets", None))
+        Error(ValueError(
+          cell,
+          ["Array"],
+          [
+            Some(
+              "Wasn't wrapped in delimiters "
+              <> delimiters.0
+              <> " "
+              <> delimiters.1,
+            ),
+          ],
+          None,
+        ))
     }
     |> result.try(fn(els) {
       els
       |> list.map(fn(el) { parser(el) })
       |> result.all()
       |> result.map_error(fn(err) {
-        let ValueError(element, parser_name, context) = err
+        let ValueError(element, path, reasons, context) = err
         ValueError(
           cell,
-          "Array: Failed using ["
-            <> parser_name
-            <> "] on element ["
-            <> element
-            <> "]",
+          ["Array", ..path],
+          [
+            Some(
+              "Failed using parser "
+              <> util.list_to_string(path, function.identity)
+              <> " on element ["
+              <> element
+              <> "]",
+            ),
+            ..reasons
+          ],
           context,
         )
       })
