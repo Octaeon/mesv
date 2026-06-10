@@ -93,7 +93,6 @@
 //// ```
 //// 
 
-import gleam/bit_array
 import gleam/float
 import gleam/function
 import gleam/int
@@ -1030,40 +1029,31 @@ pub fn just_data(
 
 // => Utility parser functions
 
-pub type ValueError {
-  ValueError(cell: String, parser: String, explanation: Option(String))
+pub type ValueError(e) {
+  ValueError(cell: String, parser: String, additional_context: Option(e))
 }
 
 pub fn make_primitive(
   name: String,
   func: fn(String) -> Result(a, b),
-) -> fn(String) -> Result(a, ValueError) {
+) -> fn(String) -> Result(a, ValueError(b)) {
   fn(val: String) {
     val
     |> func()
-    |> result.map_error(fn(_) { ValueError(val, name, None) })
+    |> result.map_error(fn(err) { ValueError(val, name, Some(err)) })
   }
 }
 
-pub fn integer(val: String) -> Result(Int, ValueError) {
-  val
-  |> string.trim()
-  |> int.parse()
-  |> result.map_error(fn(_) { ValueError(val, "Integer, Base 10", None) })
+pub fn integer(val: String) -> Result(Int, ValueError(_)) {
+  integer_arbitrary_base(10)(val)
 }
 
-pub fn integer_hex(val: String) -> Result(Int, ValueError) {
-  val
-  |> string.trim()
-  |> int.base_parse(16)
-  |> result.map_error(fn(_) { ValueError(val, "Integer, Base 16", None) })
+pub fn integer_hex(val: String) -> Result(Int, ValueError(_)) {
+  integer_arbitrary_base(16)(val)
 }
 
-pub fn integer_binary(val: String) -> Result(Int, ValueError) {
-  val
-  |> string.trim()
-  |> int.base_parse(2)
-  |> result.map_error(fn(_) { ValueError(val, "Integer, Base 2", None) })
+pub fn integer_binary(val: String) -> Result(Int, ValueError(_)) {
+  integer_arbitrary_base(2)(val)
 }
 
 /// The `int.base_parse` gleam stdlib function used in this function works only for bases
@@ -1078,21 +1068,21 @@ pub fn integer_binary(val: String) -> Result(Int, ValueError) {
 /// 
 pub fn integer_arbitrary_base(
   base: Int,
-) -> fn(String) -> Result(Int, ValueError) {
+) -> fn(String) -> Result(Int, ValueError(_)) {
   case base {
     b if b < 2 || b > 36 -> panic
-    b -> fn(val: String) -> Result(Int, ValueError) {
+    b -> fn(val: String) -> Result(Int, ValueError(_)) {
       val
       |> string.trim()
       |> int.base_parse(b)
       |> result.map_error(fn(_) {
-        ValueError(val, "Integer, Base " <> int.to_string(b), None)
+        ValueError(val, "Integer: Base " <> int.to_string(b), None)
       })
     }
   }
 }
 
-pub fn float(val: String) -> Result(Float, ValueError) {
+pub fn float(val: String) -> Result(Float, ValueError(_)) {
   val
   |> string.trim()
   |> float.parse()
@@ -1109,7 +1099,7 @@ pub fn float(val: String) -> Result(Float, ValueError) {
 /// ### Acceptable non-strict values for `False`
 /// `false`, `fake`, `f`, `no`, `n`, `0`
 /// 
-pub fn bool(strict: Bool) -> fn(String) -> Result(Bool, ValueError) {
+pub fn bool(strict: Bool) -> fn(String) -> Result(Bool, ValueError(_)) {
   fn(val: String) {
     let cleaned = val |> string.trim() |> string.lowercase()
     case cleaned {
@@ -1120,41 +1110,202 @@ pub fn bool(strict: Bool) -> fn(String) -> Result(Bool, ValueError) {
       _ ->
         Error(ValueError(
           val,
-          "Bool",
-          Some("Unrecognized variant for boolean value"),
+          "Bool: "
+            <> case strict {
+            True -> "Strict"
+            False -> "Relaxed"
+          },
+          None,
         ))
     }
   }
 }
 
-pub fn string(val: String) -> Result(String, ValueError) {
-  Ok(val)
-}
-
-pub fn char(val: String) -> Result(String, ValueError) {
-  let cleaned = string.trim(val)
-  case string.length(cleaned) {
-    1 -> Ok(cleaned)
-    0 -> Error(ValueError(val, "Char", Some("Cell was empty when trimmed")))
-    _ ->
-      Error(ValueError(
-        cleaned,
-        "Char",
-        Some("Cell was more than a single character when trimmed"),
-      ))
+pub fn accept_only(
+  value expected: String,
+) -> fn(String) -> Result(Nil, ValueError(_)) {
+  fn(val: String) {
+    case expected == val {
+      True -> Ok(Nil)
+      False ->
+        Error(ValueError(val, "Value: Is not [" <> expected <> "]", None))
+    }
   }
 }
 
-// pub fn array(
-//   parser: fn(String) -> Result(a, ValueError),
-// ) -> fn(String) -> Result(List(a), ValueError) {
-//   fn(cell: String) {
-//     let cleaned = string.trim(cell)
-//     let _ = 1
+pub fn string(val: String) -> Result(String, ValueError(_)) {
+  Ok(val)
+}
 
-//     todo
-//   }
-// }
+pub fn char(val: String) -> Result(String, ValueError(_)) {
+  let cleaned = string.trim(val)
+  case string.length(cleaned) {
+    1 -> Ok(cleaned)
+    0 -> Error(ValueError(val, "Char: Empty", None))
+    _ -> Error(ValueError(cleaned, "Char: Multiple characters", None))
+  }
+}
+
+pub fn map(
+  parser: fn(String) -> Result(a, e),
+  func: fn(a) -> b,
+) -> fn(String) -> Result(b, e) {
+  fn(val: String) {
+    val
+    |> parser()
+    |> result.map(func)
+  }
+}
+
+pub fn require_custom(
+  parser: fn(String) -> Result(a, e),
+  predicate: fn(a) -> Option(e),
+) -> fn(String) -> Result(a, e) {
+  fn(val: String) {
+    val
+    |> parser()
+    |> result.try(fn(v) {
+      case predicate(v) {
+        None -> Ok(v)
+        Some(err) -> Error(err)
+      }
+    })
+  }
+}
+
+pub fn require(
+  parser: fn(String) -> Result(a, ValueError(e)),
+  predicate: fn(a) -> Bool,
+) -> fn(String) -> Result(a, ValueError(e)) {
+  fn(val: String) {
+    val
+    |> parser()
+    |> result.try(fn(v) {
+      case predicate(v) {
+        True -> Ok(v)
+        False ->
+          Error(ValueError(val, "Require: Didn't pass the predicate", None))
+      }
+    })
+  }
+}
+
+pub fn try(
+  parser: fn(String) -> Result(a, e),
+  func: fn(a) -> Result(b, e),
+) -> fn(String) -> Result(b, e) {
+  fn(val: String) {
+    val
+    |> parser()
+    |> result.try(func)
+  }
+}
+
+pub fn try_recover(
+  parser: fn(String) -> Result(a, e1),
+  func: fn(e1) -> Result(a, e2),
+) -> fn(String) -> Result(a, e2) {
+  fn(val: String) {
+    val
+    |> parser()
+    |> result.try_recover(func)
+  }
+}
+
+pub fn or(
+  parser: fn(String) -> Result(a, e),
+  default value: Result(a, e),
+) -> fn(String) -> Result(a, e) {
+  fn(val: String) {
+    val
+    |> parser()
+    |> result.or(value)
+  }
+}
+
+/// This cell can be optional.
+/// 
+/// If the cell is empty, return `Ok(none)`.
+/// If it's not, try the provided parser.
+/// 
+pub fn option(
+  parser: fn(String) -> Result(a, e),
+) -> fn(String) -> Result(Option(a), e) {
+  fn(val: String) {
+    case val {
+      "" -> Ok(None)
+      non_empty -> map(parser, Some)(non_empty)
+    }
+  }
+}
+
+/// Try to use the provided parser.
+/// 
+/// If it succeeds, return `Some(a)`; if it doesn't, return `None`.
+/// 
+pub fn attempt(
+  parser: fn(String) -> Result(a, _),
+) -> fn(String) -> Result(Option(a), _) {
+  fn(val: String) {
+    case parser(val) {
+      Ok(out) -> Ok(Some(out))
+      Error(_) -> Ok(None)
+    }
+  }
+}
+
+/// Try to use the provided parsers in the specified order.
+/// 
+/// If one of them succeeds, the successfully parsed value is immediately returned.
+/// If all of them fail, an error is returned.
+/// 
+pub fn one_of(
+  parsers: List(fn(String) -> Result(a, _)),
+) -> fn(String) -> Result(a, ValueError(_)) {
+  fn(val: String) {
+    parsers
+    |> list.find_map(fn(try) { try(val) })
+    |> result.map_error(fn(_) {
+      ValueError(val, "One Of: No parsers succeeded", None)
+    })
+  }
+}
+
+pub fn array(
+  parser: fn(String) -> Result(a, ValueError(e)),
+) -> fn(String) -> Result(List(a), ValueError(e)) {
+  fn(cell: String) {
+    let trimmed = string.trim(cell)
+    case string.starts_with(trimmed, "[") && string.ends_with(trimmed, "]") {
+      True ->
+        Ok(
+          trimmed
+          |> string.remove_prefix("[")
+          |> string.remove_suffix("]")
+          |> string.split(on: ","),
+        )
+      False ->
+        Error(ValueError(cell, "Array: Wasn't wrapped in square brackets", None))
+    }
+    |> result.try(fn(els) {
+      els
+      |> list.map(fn(el) { parser(el) })
+      |> result.all()
+      |> result.map_error(fn(err) {
+        let ValueError(element, parser_name, context) = err
+        ValueError(
+          cell,
+          "Array: Failed using ["
+            <> parser_name
+            <> "] on element ["
+            <> element
+            <> "]",
+          context,
+        )
+      })
+    })
+  }
+}
 
 // ==== Private Functions ====
 
