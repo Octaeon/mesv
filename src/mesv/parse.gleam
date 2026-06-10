@@ -93,8 +93,11 @@
 //// ```
 //// 
 
+import gleam/float
 import gleam/function
+import gleam/int
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
@@ -1024,6 +1027,83 @@ pub fn just_data(
   })
 }
 
+// => Utility parser functions
+
+pub type ValueError {
+  ValueError(cell: String, parser: String, explanation: Option(String))
+}
+
+pub fn make_primitive(
+  name: String,
+  func: fn(String) -> Result(a, b),
+) -> fn(String) -> Result(a, ValueError) {
+  fn(val: String) {
+    val
+    |> func()
+    |> result.map_error(fn(_) { ValueError(val, name, None) })
+  }
+}
+
+pub fn integer(val: String) -> Result(Int, ValueError) {
+  val
+  |> string.trim()
+  |> int.parse()
+  |> result.map_error(fn(_) { ValueError(val, "Integer", None) })
+}
+
+pub fn float(val: String) -> Result(Float, ValueError) {
+  val
+  |> string.trim()
+  |> float.parse()
+  |> result.map_error(fn(_) { ValueError(val, "Float", None) })
+}
+
+/// Curried function. If strict, only the words `true` and `false` will successfully parse into a `Bool` value.
+/// 
+/// If false, other acronyms can also be successfully parsed.
+/// 
+/// ### Acceptable non-strict values for `True`
+/// `true`, `truth`, `tru`, `t`, `yes`, `y`, `1`
+/// 
+/// ### Acceptable non-strict values for `False`
+/// `false`, `fake`, `f`, `no`, `n`, `0`
+/// 
+pub fn bool(strict: Bool) -> fn(String) -> Result(Bool, ValueError) {
+  fn(val: String) {
+    let cleaned = val |> string.trim() |> string.lowercase()
+    case cleaned {
+      "true" -> Ok(True)
+      "false" -> Ok(False)
+      "truth" | "tru" | "t" | "yes" | "y" | "1" if !strict -> Ok(True)
+      "fake" | "f" | "no" | "n" | "0" if !strict -> Ok(False)
+      _ ->
+        Error(ValueError(
+          val,
+          "Bool",
+          Some("Unrecognized variant for boolean value"),
+        ))
+    }
+  }
+}
+
+pub fn string(val: String) -> Result(String, ValueError) {
+  Ok(val)
+}
+
+pub fn char(val: String) -> Result(String, ValueError) {
+  let cleaned = string.trim(val)
+  case string.length(cleaned) {
+    1 -> Ok(cleaned)
+    0 -> Error(ValueError(val, "Char", Some("Cell was empty when trimmed")))
+    _ ->
+      Error(ValueError(
+        cleaned,
+        "Char",
+        Some("Cell was more than a single character when trimmed"),
+      ))
+  }
+}
+
 // ==== Private Functions ====
 
 fn drop(from: List(c), count: Int) -> Result(List(c), Nil) {
@@ -1430,16 +1510,5 @@ fn data_row_to_metadata_row(err: DataRowError(e)) -> MetadataRowError {
         "Created by converting from DataRowError `CellParsingFailed`. Reason: "
         <> reason,
       )
-  }
-}
-
-fn list_to_string(l: List(a), to_str: fn(a) -> String) -> String {
-  case l {
-    [] -> "[ Empty ]"
-    non_empty ->
-      non_empty
-      |> list.map(fn(s) { "\"" <> to_str(s) <> "\"" })
-      |> string.join(", ")
-      |> fn(s) { "[ " <> s <> " ]" }
   }
 }

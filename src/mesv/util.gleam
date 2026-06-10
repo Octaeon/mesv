@@ -215,3 +215,26 @@ fn take_until_unescaped_loop(
     Error(Nil) -> Error(Nil)
   }
 }
+
+/// Utility function to convert a list into a string, using the provided function.
+/// 
+/// Since this is mainly for my own use, it's structured how I like it:
+/// 
+/// It wraps the entire list in square brackets, and separates each element with ', '
+/// 
+/// ## Example
+/// ```gleam
+/// assert list_to_string(["first", "second", "another"], function.identity)
+///   == "[ \"first\", \"second\", \"another\" ]"
+/// ```
+/// 
+pub fn list_to_string(l: List(a), to_str: fn(a) -> String) -> String {
+  case l {
+    [] -> "[ Empty ]"
+    non_empty ->
+      non_empty
+      |> list.map(fn(s) { "\"" <> to_str(s) <> "\"" })
+      |> string.join(", ")
+      |> fn(s) { "[ " <> s <> " ]" }
+  }
+}
