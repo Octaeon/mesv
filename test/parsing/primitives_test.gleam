@@ -1,5 +1,5 @@
 //// A test module for testing the correctness of the `parse` primitives (parse.int,
-//// parse.float, parse.bool, etc) as well as their transformations (such as parse.list,
+//// parse.float, primitive.bool, etc) as well as their transformations (such as parse.list,
 //// parse.tuple)
 //// 
 
@@ -7,12 +7,13 @@ import gleam/function
 import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
-import mesv/parse.{CellParsingFailed, Text, ValueError}
+import mesv/parse.{CellParsingFailed, Text}
+import mesv/parse/primitive.{ValueError}
 
 pub fn integer_base_10_test() -> Nil {
   let parsed =
     parse.build(function.identity)
-    |> parse.column(parse.integer)
+    |> parse.column(primitive.integer)
     |> parse.run(Text("1\n2\na\n1.2\n"))
 
   let expected = [
@@ -43,7 +44,7 @@ pub fn integer_base_10_test() -> Nil {
 pub fn integer_base_2_test() -> Nil {
   let parsed =
     parse.build(function.identity)
-    |> parse.column(parse.integer_binary)
+    |> parse.column(primitive.integer_binary)
     |> parse.run(Text("1\n10\n1001\n12"))
 
   let expected = [
@@ -62,7 +63,7 @@ pub fn integer_base_2_test() -> Nil {
 pub fn integer_base_16_test() -> Nil {
   let parsed =
     parse.build(function.identity)
-    |> parse.column(parse.integer_hex)
+    |> parse.column(primitive.integer_hex)
     |> parse.run(Text("1\n10\n1001\nFF\nf\nF\n1.f"))
 
   let expected = [
@@ -89,7 +90,7 @@ pub fn integer_base_16_test() -> Nil {
 pub fn integer_arbitrary_base_test() -> Nil {
   let parsed =
     parse.build(function.identity)
-    |> parse.column(parse.integer_arbitrary_base(7))
+    |> parse.column(primitive.integer_arbitrary_base(7))
     |> parse.run(Text("1\n10\n2004\nFF\n1.0"))
 
   let expected = [
@@ -117,7 +118,7 @@ pub fn integer_arbitrary_base_test() -> Nil {
 pub fn float_test() -> Nil {
   let parsed =
     parse.build(function.identity)
-    |> parse.column(parse.float)
+    |> parse.column(primitive.float)
     |> parse.run(Text("1\n10\n100.1\n1.f\n.00001\n.10.0\n"))
 
   let expected = [
@@ -147,7 +148,7 @@ pub fn float_test() -> Nil {
 pub fn character_test() -> Nil {
   let parsed =
     parse.build(function.identity)
-    |> parse.column(parse.char)
+    |> parse.column(primitive.char)
     |> parse.run(Text(
       "1\n2\na\n1.2\nthere can be whitespace\n   !   \nIt's just trimmed\n",
     ))
@@ -191,7 +192,7 @@ pub fn character_test() -> Nil {
 pub fn optional_test() -> Nil {
   let parsed =
     parse.build(function.identity)
-    |> parse.column(parse.integer |> parse.option())
+    |> parse.column(primitive.integer |> primitive.option())
     |> parse.run(Text("1\n\na\n1.2"))
 
   let expected = [
@@ -218,7 +219,7 @@ pub fn optional_test() -> Nil {
 pub fn attempt_test() -> Nil {
   let parsed =
     parse.build(function.identity)
-    |> parse.column(parse.integer |> parse.attempt())
+    |> parse.column(primitive.integer |> primitive.attempt())
     |> parse.run(Text("1\n\na\n1.2"))
 
   let expected = [
@@ -234,7 +235,7 @@ pub fn attempt_test() -> Nil {
 pub fn map_test() -> Nil {
   let parsed =
     parse.build(function.identity)
-    |> parse.column(parse.integer |> parse.map(fn(i) { i >= 18 }))
+    |> parse.column(primitive.integer |> primitive.map(fn(i) { i >= 18 }))
     |> parse.run(Text("1\n\n20\n21.2\na\n\"I'm an adult, I swear!\""))
 
   let expected = [
@@ -280,8 +281,8 @@ pub fn try_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(
-      parse.string
-      |> parse.try(fn(val) {
+      primitive.string
+      |> primitive.try(fn(val) {
         val
         |> string.split_once(on: " ")
         |> result.map_error(fn(_) {
@@ -321,8 +322,8 @@ pub fn list_basic_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(
-      parse.bool(False)
-      |> parse.array(#("[", "]"), "."),
+      primitive.bool(False)
+      |> primitive.array(#("[", "]"), "."),
     )
     |> parse.run(Text(
       "[true.false.true]\n[no.yes]\n[1.1.1.1]\n[True.1.False.0.Yes.NO]",
@@ -342,8 +343,8 @@ pub fn list_basic_strict_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(
-      parse.bool(True)
-      |> parse.array(#("[", "]"), "."),
+      primitive.bool(True)
+      |> primitive.array(#("[", "]"), "."),
     )
     |> parse.run(Text(
       "[true.false.true]\n[no.yes]\n[1.1.1.1]\n[True.1.False.0.Yes.NO]",
@@ -387,8 +388,8 @@ pub fn list_basic_errors_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(
-      parse.bool(False)
-      |> parse.array(#("[", "]"), "."),
+      primitive.bool(False)
+      |> primitive.array(#("[", "]"), "."),
     )
     |> parse.run(Text("[  true.  false  .  true  ]\ntrue.true.true\n[.true]"))
 
@@ -421,9 +422,9 @@ pub fn list_composite_parser_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(
-      parse.bool(True)
-      |> parse.attempt()
-      |> parse.array(#("[", "]"), "."),
+      primitive.bool(True)
+      |> primitive.attempt()
+      |> primitive.array(#("[", "]"), "."),
     )
     |> parse.run(Text("[  true.  false  .  true  ]\ntrue.true.true\n[.true]"))
 
