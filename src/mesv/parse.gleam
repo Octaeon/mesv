@@ -1049,12 +1049,14 @@ pub type ValueError(e) {
 
 pub fn make_primitive(
   name: String,
-  func: fn(String) -> Result(a, b),
+  func: fn(String) -> Result(a, #(Option(String), b)),
 ) -> fn(String) -> Result(a, ValueError(b)) {
   fn(val: String) {
     val
     |> func()
-    |> result.map_error(fn(err) { ValueError(val, [name], [None], Some(err)) })
+    |> result.map_error(fn(err) {
+      ValueError(val, [name], [err.0], Some(err.1))
+    })
   }
 }
 
@@ -1086,23 +1088,79 @@ pub fn integer_arbitrary_base(
   case base {
     b if b < 2 || b > 36 -> panic
     b -> fn(val: String) -> Result(Int, ValueError(_)) {
-      val
-      |> string.trim()
-      |> int.base_parse(b)
-      |> result.map_error(fn(_) {
-        ValueError(val, ["Integer base " <> int.to_string(b)], [None], None)
-      })
+      case val {
+        "" ->
+          Error(ValueError(
+            val,
+            ["Integer base " <> int.to_string(b)],
+            [Some("Cell was empty")],
+            None,
+          ))
+        non_empty ->
+          non_empty
+          |> string.trim()
+          |> int.base_parse(b)
+          |> result.map_error(fn(_) {
+            ValueError(
+              val,
+              ["Integer base " <> int.to_string(b)],
+              [
+                case string.contains(non_empty, ".") {
+                  True -> Some("For floating point numbers, use parse.float")
+                  False -> None
+                },
+              ],
+              None,
+            )
+          })
+      }
     }
   }
 }
 
 /// Primitive parser for a float value, along with a corresponding error message.
 /// 
+/// It supports values written like `10`, `.01`, `10.` - as long as a number could be
+/// converted to a `Float`, it will be.
+/// 
+/// However, it does not support formats such as `1.0f` - only decimal digits and the
+/// period (dot) are allowed, and only one dot.
+/// 
 pub fn float(val: String) -> Result(Float, ValueError(_)) {
-  val
-  |> string.trim()
-  |> float.parse()
-  |> result.map_error(fn(_) { ValueError(val, ["Float"], [None], None) })
+  let parser_name = "Float"
+  case val {
+    "" -> Error(ValueError(val, [parser_name], [Some("Cell was empty")], None))
+    non_empty -> {
+      let trimmed = string.trim(non_empty)
+      case string.split(trimmed, ".") {
+        ["", decimals] -> Ok("0." <> decimals)
+        [whole, ""] -> Ok(whole <> ".0")
+        [whole, decimals] -> Ok(whole <> "." <> decimals)
+        [singular] -> Ok(singular <> ".0")
+        other ->
+          Error(ValueError(
+            val,
+            [parser_name],
+            [
+              Some(
+                "Found "
+                <> other
+                |> list.length()
+                |> int.to_string()
+                <> " dots in cell; Only 0 or 1 are allowed.",
+              ),
+            ],
+            None,
+          ))
+      }
+      |> result.try(fn(str) {
+        float.parse(str)
+        |> result.map_error(fn(_) {
+          ValueError(non_empty, [parser_name], [None], None)
+        })
+      })
+    }
+  }
 }
 
 /// Curried function. If strict, only the words `true` and `false` will
@@ -1128,11 +1186,11 @@ pub fn bool(strict: Bool) -> fn(String) -> Result(Bool, ValueError(_)) {
         Error(ValueError(
           val,
           [
-            "Bool: "
-            <> case strict {
+            case strict {
               True -> "Strict"
               False -> "Relaxed"
-            },
+            }
+            <> " Bool",
           ],
           [None],
           None,
@@ -1186,7 +1244,7 @@ pub fn char(val: String) -> Result(String, ValueError(_)) {
   let cleaned = string.trim(val)
   case string.length(cleaned) {
     1 -> Ok(cleaned)
-    0 -> Error(ValueError(val, ["Char"], [Some("Empty")], None))
+    0 -> Error(ValueError(val, ["Char"], [Some("Cell was empty")], None))
     _ -> Error(ValueError(val, ["Char"], [Some("Multiple characters")], None))
   }
 }
@@ -1200,12 +1258,17 @@ pub fn char(val: String) -> Result(String, ValueError(_)) {
 /// For functions that may fail (return a `Result`) use the `try` function.
 /// 
 pub fn map(
-  parser: fn(String) -> Result(a, e),
+  parser: fn(String) -> Result(a, ValueError(e)),
   func: fn(a) -> b,
-) -> fn(String) -> Result(b, e) {
+) -> fn(String) -> Result(b, ValueError(e)) {
+  let parser_name = "Map"
   fn(val: String) {
     val
     |> parser()
+    |> result.map_error(fn(err) {
+      let ValueError(cell, path, reasons, context) = err
+      ValueError(cell, [parser_name, ..path], [None, ..reasons], context)
+    })
     |> result.map(func)
   }
 }
@@ -1219,13 +1282,22 @@ pub fn map(
 /// Useful if you want to use the parsing primitives but are not satisfied with the error messages.
 /// 
 pub fn map_error(
-  parser: fn(String) -> Result(a, e),
+  parser: fn(String) -> Result(a, ValueError(e)),
   func: fn(e) -> d,
-) -> fn(String) -> Result(a, d) {
+) -> fn(String) -> Result(a, ValueError(d)) {
+  let parser_name = "Map error"
   fn(val: String) {
     val
     |> parser()
-    |> result.map_error(func)
+    |> result.map_error(fn(err) {
+      let ValueError(cell, path, reasons, context) = err
+      ValueError(
+        cell,
+        [parser_name, ..path],
+        [None, ..reasons],
+        context |> option.map(func),
+      )
+    })
   }
 }
 
@@ -1242,16 +1314,27 @@ pub fn map_error(
 /// use the `try` function instead.
 /// 
 pub fn require_custom(
-  parser: fn(String) -> Result(a, e),
+  parser: fn(String) -> Result(a, ValueError(e)),
   predicate: fn(a) -> Option(e),
-) -> fn(String) -> Result(a, e) {
+) -> fn(String) -> Result(a, ValueError(e)) {
+  let parser_name = "Require custom"
   fn(val: String) {
     val
     |> parser()
+    |> result.map_error(fn(err) {
+      let ValueError(cell, path, reasons, context) = err
+      ValueError(cell, [parser_name, ..path], [None, ..reasons], context)
+    })
     |> result.try(fn(v) {
       case predicate(v) {
         None -> Ok(v)
-        Some(err) -> Error(err)
+        Some(err) ->
+          Error(ValueError(
+            val,
+            [parser_name],
+            [Some("Didn't pass custom predicate")],
+            Some(err),
+          ))
       }
     })
   }
@@ -1287,7 +1370,7 @@ pub fn require(
           Error(ValueError(
             val,
             [parser_name],
-            [Some("Didn't pass the predicate")],
+            [Some("Didn't pass predicate")],
             None,
           ))
       }
@@ -1302,13 +1385,23 @@ pub fn require(
 /// incorrect for a reason other than cell structure.
 /// 
 pub fn try(
-  parser: fn(String) -> Result(a, e),
-  func: fn(a) -> Result(b, e),
-) -> fn(String) -> Result(b, e) {
+  parser: fn(String) -> Result(a, ValueError(e)),
+  func: fn(a) -> Result(b, ValueError(e)),
+) -> fn(String) -> Result(b, ValueError(e)) {
+  let parser_name = "Try"
   fn(val: String) {
     val
     |> parser()
     |> result.try(func)
+    |> result.map_error(fn(err) {
+      let ValueError(cell, path, reasons, additional_context) = err
+      ValueError(
+        cell,
+        [parser_name, ..path],
+        [None, ..reasons],
+        additional_context,
+      )
+    })
   }
 }
 
@@ -1318,13 +1411,35 @@ pub fn try(
 /// Can be used to recover from failure.
 /// 
 pub fn try_recover(
-  parser: fn(String) -> Result(a, e1),
-  func: fn(e1) -> Result(a, e2),
-) -> fn(String) -> Result(a, e2) {
+  parser: fn(String) -> Result(a, ValueError(e1)),
+  func: fn(e1) -> Result(a, ValueError(e2)),
+) -> fn(String) -> Result(a, ValueError(e2)) {
+  let parser_name = "Try recover"
   fn(val: String) {
     val
     |> parser()
-    |> result.try_recover(func)
+    |> result.try_recover(fn(err) {
+      let ValueError(cell, path, reasons, context) = err
+      case option.map(context, func) {
+        Some(Ok(val)) -> Ok(val)
+
+        Some(Error(ValueError(cell, path, reasons, additional_context))) ->
+          Error(ValueError(
+            cell,
+            [parser_name, ..path],
+            [None, ..reasons],
+            additional_context,
+          ))
+
+        None ->
+          Error(ValueError(
+            cell,
+            [parser_name, ..path],
+            [Some("Context not present"), ..reasons],
+            None,
+          ))
+      }
+    })
   }
 }
 
@@ -1333,12 +1448,22 @@ pub fn try_recover(
 /// Can be used to recover from failure.
 /// 
 pub fn or(
-  parser: fn(String) -> Result(a, e),
-  default value: Result(a, e),
-) -> fn(String) -> Result(a, e) {
+  parser: fn(String) -> Result(a, ValueError(e)),
+  default value: Result(a, ValueError(e)),
+) -> fn(String) -> Result(a, ValueError(e)) {
+  let parser_name = "Or"
   fn(val: String) {
     val
     |> parser()
+    |> result.map_error(fn(err) {
+      let ValueError(cell, path, reasons, additional_context) = err
+      ValueError(
+        cell,
+        [parser_name, ..path],
+        [None, ..reasons],
+        additional_context,
+      )
+    })
     |> result.or(value)
   }
 }
@@ -1349,15 +1474,39 @@ pub fn or(
 /// If it's not, try the provided parser.
 /// 
 pub fn option(
-  parser: fn(String) -> Result(a, e),
-) -> fn(String) -> Result(Option(a), e) {
+  parser: fn(String) -> Result(a, ValueError(e)),
+) -> fn(String) -> Result(Option(a), ValueError(e)) {
+  let parser_name = "Optional"
   fn(val: String) {
     case val {
       "" -> Ok(None)
-      non_empty -> map(parser, Some)(non_empty)
+      non_empty ->
+        non_empty
+        |> parser()
+        |> result.map(Some)
+        |> result.map_error(fn(err) {
+          let ValueError(cell, path, reasons, additional_context) = err
+          ValueError(
+            cell,
+            [parser_name, ..path],
+            [None, ..reasons],
+            additional_context,
+          )
+        })
     }
   }
 }
+
+// let parser_name = "Map"
+// fn(val: String) {
+//   val
+//   |> parser()
+//   |> result.map_error(fn(err) {
+//     let ValueError(cell, path, reasons, context) = err
+//     ValueError(cell, [parser_name, ..path], [None, ..reasons], context)
+//   })
+//   |> result.map(func)
+// }
 
 /// Attempt to parse this cell using the provided parser.
 /// 
@@ -1403,11 +1552,25 @@ pub fn one_of(
 /// 
 /// If not, the first Error is wrapped in a broader Error that explains what went wrong.
 /// 
+/// ## Note
+/// Nested lists are not in my scope of consideration right now, so they're not natively
+/// supported. Most obviously, if you try and nest two lists which use the same separators,
+/// the nested list will be split into cells when the top level list is being split.
+/// Of course it could be solved, the same way I did for splitting CSV cells and rows, but
+/// for now, it's beyond the scope of this project. Honestly, even these primitives are most
+/// likely scope creep, so I won't polish them to perfection.
+/// 
+/// If you do want to work on them yourself, you're welcome to, and if you could create a PR
+/// in the event you made something useful, I'd be delighted.
+/// 
+/// But for now, I'll be leaving these functions alone.
+/// 
 pub fn array(
   parser: fn(String) -> Result(a, ValueError(e)),
   delimiters: #(String, String),
   separator: String,
 ) -> fn(String) -> Result(List(a), ValueError(e)) {
+  let parser_name = "Array"
   fn(cell: String) {
     let trimmed = string.trim(cell)
     case
@@ -1424,13 +1587,14 @@ pub fn array(
       False ->
         Error(ValueError(
           cell,
-          ["Array"],
+          [parser_name],
           [
             Some(
-              "Wasn't wrapped in delimiters "
+              "Wasn't wrapped in delimiters #("
               <> delimiters.0
-              <> " "
-              <> delimiters.1,
+              <> ", "
+              <> delimiters.1
+              <> ")",
             ),
           ],
           None,
@@ -1444,12 +1608,12 @@ pub fn array(
         let ValueError(element, path, reasons, context) = err
         ValueError(
           cell,
-          ["Array", ..path],
+          [parser_name, ..path],
           [
             Some(
               "Failed using parser "
               <> util.list_to_string(path, function.identity)
-              <> " on element ["
+              <> " on ["
               <> element
               <> "]",
             ),
