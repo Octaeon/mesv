@@ -5,6 +5,7 @@
 
 import gleam/function
 import gleam/option.{None, Some}
+import gleam/result
 import gleam/string
 import mesv/parse.{CellParsingFailed, Text, ValueError}
 
@@ -198,14 +199,14 @@ pub fn optional_test() -> Nil {
     Ok(None),
     Error(CellParsingFailed(
       "a",
-      ValueError("a", ["Integer base 10"], [None], None),
+      ValueError("a", ["Optional", "Integer base 10"], [None, None], None),
     )),
     Error(CellParsingFailed(
       "1.2",
       ValueError(
         "1.2",
-        ["Integer base 10"],
-        [Some("For floating point numbers, use parse.float")],
+        ["Optional", "Integer base 10"],
+        [None, Some("For floating point numbers, use parse.float")],
         None,
       ),
     )),
@@ -240,25 +241,35 @@ pub fn map_test() -> Nil {
     Ok(False),
     Error(CellParsingFailed(
       "",
-      ValueError("", ["Integer base 10"], [Some("Cell was empty")], None),
+      ValueError(
+        "",
+        ["Map", "Integer base 10"],
+        [None, Some("Cell was empty")],
+        None,
+      ),
     )),
     Ok(True),
     Error(CellParsingFailed(
       "21.2",
       ValueError(
         "21.2",
-        ["Integer base 10"],
-        [Some("For floating point numbers, use parse.float")],
+        ["Map", "Integer base 10"],
+        [None, Some("For floating point numbers, use parse.float")],
         None,
       ),
     )),
     Error(CellParsingFailed(
       "a",
-      ValueError("a", ["Integer base 10"], [None], None),
+      ValueError("a", ["Map", "Integer base 10"], [None, None], None),
     )),
     Error(CellParsingFailed(
       "I'm an adult, I swear!",
-      ValueError("I'm an adult, I swear!", ["Integer base 10"], [None], None),
+      ValueError(
+        "I'm an adult, I swear!",
+        ["Map", "Integer base 10"],
+        [None, None],
+        None,
+      ),
     )),
   ]
 
@@ -270,13 +281,35 @@ pub fn try_test() -> Nil {
     parse.build(function.identity)
     |> parse.column(
       parse.string
-      |> parse.try(string.split_once(_, on: " ")),
+      |> parse.try(fn(val) {
+        val
+        |> string.split_once(on: " ")
+        |> result.map_error(fn(_) {
+          ValueError(val, ["Split on space"], [Some("No space")], None)
+        })
+      }),
     )
     |> parse.run(Text("nope\nno_spaces_here\nokay have_one\nmaybe even two"))
 
   let expected = [
-    Error(CellParsingFailed("nope", Nil)),
-    Error(CellParsingFailed("no_spaces_here", Nil)),
+    Error(CellParsingFailed(
+      "nope",
+      ValueError(
+        "nope",
+        ["Try", "Split on space"],
+        [None, Some("No space")],
+        None,
+      ),
+    )),
+    Error(CellParsingFailed(
+      "no_spaces_here",
+      ValueError(
+        "no_spaces_here",
+        ["Try", "Split on space"],
+        [None, Some("No space")],
+        None,
+      ),
+    )),
     Ok(#("okay", "have_one")),
     Ok(#("maybe", "even two")),
   ]
@@ -322,8 +355,8 @@ pub fn list_basic_strict_test() -> Nil {
       "[no.yes]",
       ValueError(
         "[no.yes]",
-        ["Array", "Bool: Strict"],
-        [Some("Failed using parser [ \"Bool: Strict\" ] on element [no]"), None],
+        ["Array", "Strict Bool"],
+        [Some("Failed using parser [ \"Strict Bool\" ] on [no]"), None],
         None,
       ),
     )),
@@ -331,8 +364,8 @@ pub fn list_basic_strict_test() -> Nil {
       "[1.1.1.1]",
       ValueError(
         "[1.1.1.1]",
-        ["Array", "Bool: Strict"],
-        [Some("Failed using parser [ \"Bool: Strict\" ] on element [1]"), None],
+        ["Array", "Strict Bool"],
+        [Some("Failed using parser [ \"Strict Bool\" ] on [1]"), None],
         None,
       ),
     )),
@@ -340,8 +373,8 @@ pub fn list_basic_strict_test() -> Nil {
       "[True.1.False.0.Yes.NO]",
       ValueError(
         "[True.1.False.0.Yes.NO]",
-        ["Array", "Bool: Strict"],
-        [Some("Failed using parser [ \"Bool: Strict\" ] on element [1]"), None],
+        ["Array", "Strict Bool"],
+        [Some("Failed using parser [ \"Strict Bool\" ] on [1]"), None],
         None,
       ),
     )),
@@ -366,7 +399,7 @@ pub fn list_basic_errors_test() -> Nil {
       ValueError(
         "true.true.true",
         ["Array"],
-        [Some("Wasn't wrapped in delimiters [ ]")],
+        [Some("Wasn't wrapped in delimiters #([, ])")],
         None,
       ),
     )),
@@ -374,8 +407,8 @@ pub fn list_basic_errors_test() -> Nil {
       "[.true]",
       ValueError(
         "[.true]",
-        ["Array", "Bool: Relaxed"],
-        [Some("Failed using parser [ \"Bool: Relaxed\" ] on element []"), None],
+        ["Array", "Relaxed Bool"],
+        [Some("Failed using parser [ \"Relaxed Bool\" ] on []"), None],
         None,
       ),
     )),
@@ -401,7 +434,7 @@ pub fn list_composite_parser_test() -> Nil {
       ValueError(
         "true.true.true",
         ["Array"],
-        [Some("Wasn't wrapped in delimiters [ ]")],
+        [Some("Wasn't wrapped in delimiters #([, ])")],
         None,
       ),
     )),
