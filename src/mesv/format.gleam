@@ -489,22 +489,6 @@ pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
 
 // ==== Private Functions ====
 
-/// Internal function that pads a `List(a)` with element `a` until the `List` is of length `c`.
-/// 
-/// If the List is already the specified length or longer, it is returned unchanged.
-/// 
-fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
-  case c {
-    // If the pad target is non-positive, exit the function immediately
-    n if n <= 0 -> l
-    // Else try to pad to the target
-    count ->
-      el
-      |> list.repeat(count - list.length(l))
-      |> list.append(l, _)
-  }
-}
-
 fn process_cell_whitespace(
   cell: String,
   behaviour: ColumnWhitespaceBehaviour,

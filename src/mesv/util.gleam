@@ -314,3 +314,19 @@ fn map2_default_option_loop(
       ])
   }
 }
+
+/// Internal function that pads a `List(a)` with element `a` until the `List` is of length `c`.
+/// 
+/// If the List is already the specified length or longer, it is returned unchanged.
+/// 
+pub fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
+  case c {
+    // If the pad target is non-positive, exit the function immediately
+    n if n <= 0 -> l
+    // Else try to pad to the target
+    count ->
+      el
+      |> list.repeat(count - list.length(l))
+      |> list.append(l, _)
+  }
+}
