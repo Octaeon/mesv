@@ -66,7 +66,7 @@ pub fn default_normal_test() -> Nil {
   let parsed =
     make_test_parser(col_sep, row_sep, esc)
     |> parse.preprocess(Text(data))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   assert parsed

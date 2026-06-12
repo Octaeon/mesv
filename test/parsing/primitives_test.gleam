@@ -15,7 +15,7 @@ pub fn integer_base_10_test() -> Nil {
     parse.build(function.identity)
     |> parse.column(decode.integer)
     |> parse.preprocess(Text("1\n2\na\n1.2\n"))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -48,7 +48,7 @@ pub fn integer_base_2_test() -> Nil {
     parse.build(function.identity)
     |> parse.column(decode.integer_binary)
     |> parse.preprocess(Text("1\n10\n1001\n12"))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -69,7 +69,7 @@ pub fn integer_base_16_test() -> Nil {
     parse.build(function.identity)
     |> parse.column(decode.integer_hex)
     |> parse.preprocess(Text("1\n10\n1001\nFF\nf\nF\n1.f"))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -98,7 +98,7 @@ pub fn integer_arbitrary_base_test() -> Nil {
     parse.build(function.identity)
     |> parse.column(decode.integer_arbitrary_base(7))
     |> parse.preprocess(Text("1\n10\n2004\nFF\n1.0"))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -129,7 +129,7 @@ pub fn float_test() -> Nil {
     parse.build(function.identity)
     |> parse.column(decode.float)
     |> parse.preprocess(Text("1\n10\n100.1\n1.f\n.00001\n.10.0\n"))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -163,7 +163,7 @@ pub fn character_test() -> Nil {
     |> parse.preprocess(Text(
       "1\n2\na\n1.2\nthere can be whitespace\n   !   \nIt's just trimmed\n",
     ))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -207,7 +207,7 @@ pub fn optional_test() -> Nil {
     parse.build(function.identity)
     |> parse.column(decode.integer |> decode.option())
     |> parse.preprocess(Text("1\n\na\n1.2"))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -236,7 +236,7 @@ pub fn attempt_test() -> Nil {
     parse.build(function.identity)
     |> parse.column(decode.integer |> decode.attempt())
     |> parse.preprocess(Text("1\n\na\n1.2"))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -254,7 +254,7 @@ pub fn map_test() -> Nil {
     parse.build(function.identity)
     |> parse.column(decode.integer |> decode.map(fn(i) { i >= 18 }))
     |> parse.preprocess(Text("1\n\n20\n21.2\na\n\"I'm an adult, I swear!\""))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -312,7 +312,7 @@ pub fn try_test() -> Nil {
     |> parse.preprocess(Text(
       "nope\nno_spaces_here\nokay have_one\nmaybe even two",
     ))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -351,7 +351,7 @@ pub fn list_basic_test() -> Nil {
     |> parse.preprocess(Text(
       "[true.false.true]\n[no.yes]\n[1.1.1.1]\n[True.1.False.0.Yes.NO]",
     ))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -374,7 +374,7 @@ pub fn list_basic_strict_test() -> Nil {
     |> parse.preprocess(Text(
       "[true.false.true]\n[no.yes]\n[1.1.1.1]\n[True.1.False.0.Yes.NO]",
     ))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -421,7 +421,7 @@ pub fn list_basic_errors_test() -> Nil {
     |> parse.preprocess(Text(
       "[  true.  false  .  true  ]\ntrue.true.true\n[.true]",
     ))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [
@@ -460,7 +460,7 @@ pub fn list_composite_parser_test() -> Nil {
     |> parse.preprocess(Text(
       "[  true.  false  .  true  ]\ntrue.true.true\n[.true]",
     ))
-    |> parse.then()
+    |> parse.then_run()
     |> parse.then_collect_data()
 
   let expected = [

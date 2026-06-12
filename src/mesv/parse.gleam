@@ -836,7 +836,7 @@ pub fn preprocess(
 /// // -> Error(...) identical error as above, nothing happens.
 /// ```
 /// 
-pub fn then(
+pub fn then_run(
   preprocessed: Result(
     #(List(#(String, String)), Parser(a, e), Stream(List(String))),
     PreprocessingError,
@@ -943,6 +943,67 @@ pub fn then_collect_data(
   result.map(in, fn(out) { stream.to_list(out.1) })
 }
 
+/// A helper function meant to be called with the output of [`parse.then`](parse.html#then)
+/// as the input.
+/// 
+/// It should only be used if you're sure that you only want the successfully parsed data
+/// rows, and don't care about any errors or any of the metadata.
+/// 
+/// Due to this, it should not be used in situations where errors must be handled.
+/// 
+/// Additionally, it is also quite unfriendly for debugging, as the errors are simply discarded.
+/// 
+/// ## Examples
+/// ```gleam
+/// parser
+/// |> parse.preprocess(Text("some,data,123\nmalformed\"data!"))
+/// |> parse.then()
+/// |> parse.just_data()
+/// // -> Ok([Ok("some", "data", 123)])
+/// // Malformed data is parsed into `Error`s and discarded.
+/// ```
+/// 
+pub fn then_collect_parsed(
+  processed: Result(
+    #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
+    PreprocessingError,
+  ),
+) -> Result(List(a), PreprocessingError) {
+  processed
+  |> result.map(fn(output) {
+    output.1
+    |> get_parsed()
+    |> stream.to_list()
+  })
+}
+
+/// Helper function to easily extract the successfully parsed rows from the output of
+/// the [`parse.run`](parse.html#run) function.
+/// 
+/// ## Examples
+/// Without using this function:
+/// ```gleam
+/// parse.run(parser, "1,2\n1,\ntext,1.2")
+/// // -> [ Ok(#(1, 2))
+/// //    , Error(RanOutOfValues)
+/// //    , Error(CantParseRow)
+/// //    ]
+/// ```
+/// With the function:
+/// ```gleam
+/// parse.run(parser, "1,2\n1,\ntext,1.2")
+///   |> parse.get_parsed()
+///   // -> [ #(1, 2) ]
+/// ```
+/// 
+/// Of course, this is all under the assumption that the parsing succeeded initially
+/// and started execution.
+/// 
+pub fn get_parsed(rows: Stream(Result(a, DataRowError(e)))) -> Stream(a) {
+  rows
+  |> stream.filter_map(function.identity)
+}
+
 /// > **This function is deprecated, and should be replaced by using the
 ///   [`parse.preprocess`](parse.html#preprocess) and [`parse.run`](parse.html#run)
 ///   functions in that order.**
@@ -976,63 +1037,6 @@ pub fn parse(
     |> pair.map_first(list.reverse)
     |> pair.map_second(list.reverse)
   })
-}
-
-/// Helper function to easily extract the successfully parsed rows from the output of
-/// the [`parse.run`](parse.html#run) function.
-/// 
-/// ## Examples
-/// Without using this function:
-/// ```gleam
-/// parse.run(parser, "1,2\n1,\ntext,1.2")
-/// // -> [ Ok(#(1, 2))
-/// //    , Error(RanOutOfValues)
-/// //    , Error(CantParseRow)
-/// //    ]
-/// ```
-/// With the function:
-/// ```gleam
-/// parse.run(parser, "1,2\n1,\ntext,1.2")
-///   |> parse.get_parsed()
-///   // -> [ #(1, 2) ]
-/// ```
-/// 
-/// Of course, this is all under the assumption that the parsing succeeded initially
-/// and started execution.
-/// 
-pub fn get_parsed(rows: Stream(Result(a, DataRowError(e)))) -> Stream(a) {
-  rows
-  |> stream.filter_map(function.identity)
-}
-
-/// A helper function meant to be called with the output of [`parse.then`](parse.html#then)
-/// as the input.
-/// 
-/// It should only be used if you're sure that you only want the successfully parsed data
-/// rows, and don't care about any errors or any of the metadata.
-/// 
-/// Due to this, it should not be used in situations where errors must be handled.
-/// 
-/// Additionally, it is also quite unfriendly for debugging, as the errors are simply discarded.
-/// 
-/// ## Examples
-/// ```gleam
-/// parser
-/// |> parse.preprocess(Text("some,data,123\nmalformed\"data!"))
-/// |> parse.then()
-/// |> parse.just_data()
-/// // -> Ok([Ok("some", "data", 123)])
-/// // Malformed data is parsed into `Error`s and discarded.
-/// ```
-/// 
-pub fn just_data(
-  processed: Result(
-    #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
-    PreprocessingError,
-  ),
-) -> Result(Stream(a), PreprocessingError) {
-  processed
-  |> result.map(fn(output) { get_parsed(output.1) })
 }
 
 // ==== Private Functions ====

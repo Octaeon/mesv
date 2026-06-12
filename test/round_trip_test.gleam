@@ -47,7 +47,7 @@ fn build_test_unit(
       parser
       |> parse.set_expected_headers(InOrderExact(headers))
       |> parse.preprocess(RowStream(stream))
-      |> parse.then()
+      |> parse.then_run()
       // |> parse.just_data()
       |> result.map(fn(preprocessing_output) {
         stream.to_list(preprocessing_output.1)

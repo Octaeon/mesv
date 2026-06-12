@@ -7,7 +7,7 @@ fn run_test_unit(col_sep, row_sep, esc, text) {
   mesv_test.row_data_parser(col_sep, row_sep, esc)
   |> parse.set_expected_headers(Ignore)
   |> parse.preprocess(Text(col_sep <> col_sep <> row_sep <> text))
-  |> parse.then()
+  |> parse.then_run()
   |> parse.then_collect_data()
 }
 

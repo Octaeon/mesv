@@ -54,7 +54,7 @@ fn build_test_unit(
       parser
       |> parse.set_expected_headers(InOrderExact(headers))
       |> parse.preprocess(RowStream(stream))
-      |> parse.then()
+      |> parse.then_run()
       |> parse.then_collect()
     }
   }
