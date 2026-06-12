@@ -100,7 +100,7 @@ pub opaque type Formatter(a) {
 /// ## Note
 /// The transformations described by this type occur after a value representing
 /// a single row has been transformed into a `List(String)` of individual cells,
-/// but before they were escaped (escapers duplicated and wrapped if required).
+/// but before they were escaped and wrapped.
 /// 
 /// ## Another note
 /// You might notice there is no option to pad all cells to the width of the widest
@@ -242,32 +242,19 @@ pub fn init() -> Formatter(a) {
 pub fn column(
   formatter: Formatter(a),
   column_name: String,
+  whitespace: Option(ColumnWhitespaceBehaviour),
   format_col: fn(a) -> String,
 ) -> Formatter(a) {
   let WhitespaceBehaviour(def, cols) = formatter.whitespace
   Formatter(
     ..formatter,
     headers: formatter.headers |> option.map(list.append(_, [column_name])),
-    whitespace: WhitespaceBehaviour(def, list.append(cols, [None])),
+    whitespace: WhitespaceBehaviour(def, list.append(cols, [whitespace])),
     formatter: fn(value: a) -> List(String) {
       value
       |> formatter.formatter()
       |> list.append([format_col(value)])
     },
-  )
-}
-
-pub fn column_whitespace(
-  formatter: Formatter(a),
-  whitespace_behaviour: ColumnWhitespaceBehaviour,
-) -> Formatter(a) {
-  let WhitespaceBehaviour(default, specified) = formatter.whitespace
-  Formatter(
-    ..formatter,
-    whitespace: WhitespaceBehaviour(default, case specified {
-      [] -> [Some(whitespace_behaviour)]
-      non_empty -> replace_last(non_empty, Some(whitespace_behaviour))
-    }),
   )
 }
 
@@ -307,17 +294,29 @@ pub fn set_headers(
   Formatter(..formatter, headers: Some(new_headers))
 }
 
-/// Function to manually set row whitespace behaviour.
+/// Function to manually set whitespace behaviour for each column.
 /// 
 /// For more easily understandable control over this, consider using a column-based
 /// `Formatter` builder through [`format.init`](format.html#init) and
 /// [`format.column`](format.html#column).
 /// 
-pub fn set_row_whitespace(
+pub fn set_columns_whitespace(
   formatter: Formatter(a),
-  whitespace_behaviour: WhitespaceBehaviour,
+  columns: List(Option(ColumnWhitespaceBehaviour)),
 ) -> Formatter(a) {
-  Formatter(..formatter, whitespace: whitespace_behaviour)
+  let WhitespaceBehaviour(default, _) = formatter.whitespace
+  Formatter(..formatter, whitespace: WhitespaceBehaviour(default, columns))
+}
+
+/// Set the default whitespace behaviour that is used when formatting,
+/// and used when a behaviour is not specified for any given column.
+/// 
+pub fn set_default_whitespace(
+  formatter: Formatter(a),
+  default: ColumnWhitespaceBehaviour,
+) -> Formatter(a) {
+  let WhitespaceBehaviour(_, specified) = formatter.whitespace
+  Formatter(..formatter, whitespace: WhitespaceBehaviour(default, specified))
 }
 
 /// Function to set custom escaper (character that wraps the value if its'
@@ -566,12 +565,4 @@ fn make_metadata_formatter(
     <> ensafeify(metadata.1)
     <> formatter.row_separator
   }
-}
-
-fn replace_last(in l: List(a), with el: a) -> List(a) {
-  case list.reverse(l) {
-    [] -> []
-    [_, ..rest] -> [el, ..rest]
-  }
-  |> list.reverse()
 }
