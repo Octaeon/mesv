@@ -153,15 +153,15 @@ pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
   )
 }
 
-pub fn start(column_name: String, format_col: fn(a) -> String) -> Formatter(a) {
+pub fn init() -> Formatter(a) {
   Formatter(
     column_separator: ",",
     row_separator: "\n",
     escaper: "\"",
     metadata_separator: ":",
     escape_all: False,
-    column_data: #(ExactSameForAllColumns(DoNothing), Some([column_name])),
-    formatter: fn(value: a) -> List(String) { [format_col(value)] },
+    column_data: #(ExactSameForAllColumns(DoNothing), Some([])),
+    formatter: fn(_value: a) -> List(String) { [] },
   )
 }
 
@@ -173,7 +173,7 @@ pub fn column(
   Formatter(
     ..formatter,
     column_data: #(
-      ExactSameForAllColumns(DoNothing),
+      formatter.column_data.0,
       formatter.column_data.1
         |> option.map(list.append(_, [column_name])),
     ),
@@ -370,7 +370,7 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
     _escaper,
     _metadata_separator,
     _escape_all,
-    #(whitespace, maybe_headers),
+    #(_whitespace, maybe_headers),
     to_string,
   ) = formatter
 
