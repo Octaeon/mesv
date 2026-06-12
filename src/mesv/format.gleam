@@ -74,7 +74,13 @@ import mesv/util
 /// 
 /// Once you have the required `Formatter(a)`, use the [`format.run`](format.html#run) function to convert a `List(a)` into a String.
 /// 
-pub opaque type Formatter(a) {
+///  ## Note
+/// Unless you're **very certain** that you know what you're doing, don't modify the internal
+/// data of the `Formatter`.
+/// 
+/// Use the provided building functions to modify it instead.
+/// 
+pub type Formatter(a) {
   Formatter(
     column_separator: String,
     row_separator: String,

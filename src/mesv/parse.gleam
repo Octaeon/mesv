@@ -182,12 +182,20 @@ pub type DataRowError(a) {
 /// [`parse.get_parsed`](parse.html#get_parsed) function to easily extract the succesfully parsed
 /// rows. 
 /// 
-pub opaque type Parser(a, b) {
+/// ## Note
+/// Unless you're **very certain** that you know what you're doing, don't modify the internal
+/// data of the `Parser`.
+/// 
+/// Use the provided building functions to modify it instead.
+/// 
+pub type Parser(a, b) {
   Parser(
     column_separator: String,
     row_separator: String,
     escaper: String,
     metadata_separator: String,
+    // Change the `ExpectedHeaders` type from purely a data type signifying what is expected
+    // to one that keeps track of in which order columns go into the `parse` function.
     expect_headers: ExpectedHeaders,
     parse: fn(List(String)) -> Result(#(a, List(String)), DataRowError(b)),
     strict_columns: Bool,
