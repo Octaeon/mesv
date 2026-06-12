@@ -1432,14 +1432,3 @@ fn data_row_to_metadata_row(err: DataRowError(e)) -> MetadataRowError {
       )
   }
 }
-
-fn list_to_string(l: List(a), to_str: fn(a) -> String) -> String {
-  case l {
-    [] -> "[ Empty ]"
-    non_empty ->
-      non_empty
-      |> list.map(fn(s) { "\"" <> to_str(s) <> "\"" })
-      |> string.join(", ")
-      |> fn(s) { "[ " <> s <> " ]" }
-  }
-}
