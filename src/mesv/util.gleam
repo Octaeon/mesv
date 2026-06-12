@@ -215,3 +215,118 @@ fn take_until_unescaped_loop(
     Error(Nil) -> Error(Nil)
   }
 }
+
+/// Utility function to convert a list into a string, using the provided function.
+/// 
+/// Since this is mainly for my own use, it's structured how I like it:
+/// 
+/// It wraps the entire list in square brackets, and separates each element with ', '
+/// 
+/// ## Example
+/// ```gleam
+/// assert list_to_string(["first", "second", "another"], function.identity)
+///   == "[ \"first\", \"second\", \"another\" ]"
+/// ```
+/// 
+pub fn list_to_string(l: List(a), to_str: fn(a) -> String) -> String {
+  case l {
+    [] -> "[ Empty ]"
+    non_empty ->
+      non_empty
+      |> list.map(fn(s) { "\"" <> to_str(s) <> "\"" })
+      |> string.join(", ")
+      |> fn(s) { "[ " <> s <> " ]" }
+  }
+}
+
+/// A modified `list.map2` function that also accepts a default value for `List(b)`,
+/// and if the length of `List(b)` is less than that of `List(a)`, the default value
+/// provided for `b` is used for the mapping function.
+/// 
+pub fn map2_default(
+  first: List(a),
+  second: List(b),
+  default_b: b,
+  fun: fn(a, b) -> c,
+) -> List(c) {
+  map2_default_loop(first, second, default_b, fun, [])
+}
+
+fn map2_default_loop(
+  first: List(a),
+  second: List(b),
+  default_b: b,
+  fun: fn(a, b) -> c,
+  acc: List(c),
+) -> List(c) {
+  case first, second {
+    [], _ -> list.reverse(acc)
+    [head_first, ..rest_first], [] ->
+      map2_default_loop(rest_first, [], default_b, fun, [
+        fun(head_first, default_b),
+        ..acc
+      ])
+    [head_first, ..rest_first], [head_second, ..rest_second] ->
+      map2_default_loop(rest_first, rest_second, default_b, fun, [
+        fun(head_first, head_second),
+        ..acc
+      ])
+  }
+}
+
+/// A modified `util.map2_default` function specifically for mapping `List(a)` together with
+/// `List(Option(b))`. If the value at an index `i` of `List(b)` corresponding to some `a`
+/// is `None`, or if `List(b)` ran out of values, the default value provided for `b` is used
+/// for the mapping function.
+/// 
+pub fn map2_default_option(
+  first: List(a),
+  second: List(Option(b)),
+  default_b: b,
+  fun: fn(a, b) -> c,
+) -> List(c) {
+  map2_default_option_loop(first, second, default_b, fun, [])
+}
+
+fn map2_default_option_loop(
+  first: List(a),
+  second: List(Option(b)),
+  default_b: b,
+  fun: fn(a, b) -> c,
+  acc: List(c),
+) -> List(c) {
+  case first, second {
+    [], _ -> list.reverse(acc)
+    [head_first, ..rest_first], [] ->
+      map2_default_option_loop(rest_first, [], default_b, fun, [
+        fun(head_first, default_b),
+        ..acc
+      ])
+    [head_first, ..rest_first], [Some(head_second), ..rest_second] ->
+      map2_default_option_loop(rest_first, rest_second, default_b, fun, [
+        fun(head_first, head_second),
+        ..acc
+      ])
+    [head_first, ..rest_first], [None, ..rest_second] ->
+      map2_default_option_loop(rest_first, rest_second, default_b, fun, [
+        fun(head_first, default_b),
+        ..acc
+      ])
+  }
+}
+
+/// Internal function that pads a `List(a)` with element `a` until the `List` is of length `c`.
+/// 
+/// If the List is already the specified length or longer, it is returned unchanged.
+/// 
+pub fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
+  case c {
+    // If the pad target is non-positive, exit the function immediately
+    n if n <= 0 -> l
+    // Else try to pad to the target
+    count ->
+      el
+      |> list.repeat(count - list.length(l))
+      |> list.append(l, _)
+  }
+}
