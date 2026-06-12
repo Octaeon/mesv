@@ -5,11 +5,6 @@
 //// This root module is rather barren, as most of the relevant functionality is categorized
 //// into the two modules, [`mesv/format`](mesv/format.html) and [`mesv/parse`](mesv/parse.html).
 //// 
-//// TODO : As of right now, only the [`parse`](mesv/parse.html) module has support for using
-//// streams, and even that only partially (since inside both the preprocess function and run
-//// function, these streams are consumed and eagerly evaluated to produce the output), only
-//// as the input.
-//// 
 
 /// A subset of an identity function for 1-arity functions.
 /// 
