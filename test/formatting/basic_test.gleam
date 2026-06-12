@@ -1,4 +1,5 @@
 import mesv/format
+import mesv/stream
 import mesv_test.{RowData}
 
 pub fn default_normal_test() -> Nil {
@@ -7,7 +8,9 @@ pub fn default_normal_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.normal_data())
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_collect()
 
   assert formatted
     == "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"
@@ -20,13 +23,17 @@ pub fn default_whitespace_unescaped_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run([
-      RowData(
-        "Albert",
-        69,
-        "    needs to keep his distance from the borders of his cell   ",
-      ),
-    ])
+    |> format.preprocess([])
+    |> format.then_run(
+      stream.from_list([
+        RowData(
+          "Albert",
+          69,
+          "    needs to keep his distance from the borders of his cell   ",
+        ),
+      ]),
+    )
+    |> format.then_collect()
 
   assert formatted
     == "Albert,69,    needs to keep his distance from the borders of his cell   "
@@ -39,13 +46,17 @@ pub fn default_whitespace_escaped_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run([
-      RowData(
-        "Baldur",
-        67,
-        "Doesn't think his age is \"funny\", and likes aligned columns ",
-      ),
-    ])
+    |> format.preprocess([])
+    |> format.then_run(
+      stream.from_list([
+        RowData(
+          "Baldur",
+          67,
+          "Doesn't think his age is \"funny\", and likes aligned columns ",
+        ),
+      ]),
+    )
+    |> format.then_collect()
 
   assert formatted
     == "Baldur,67,\"Doesn't think his age is \"\"funny\"\", and likes aligned columns \""
@@ -58,7 +69,11 @@ pub fn default_column_separator_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.column_separator_data(col_sep))
+    |> format.preprocess([])
+    |> format.then_run(
+      stream.from_list(mesv_test.column_separator_data(col_sep)),
+    )
+    |> format.then_collect()
 
   assert formatted
     == "Alex,23,\"This is a pretty good library, don't you think?\"\nBartholemew,24,\"Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\""
@@ -71,7 +86,9 @@ pub fn default_row_separator_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.row_separator_data(row_sep))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_collect()
 
   assert formatted
     == "Alex,23,\"It should be able to, right?\"\nBartholemew,24,\"Maybe column separators,\nbut what about row separators?\""
@@ -84,7 +101,9 @@ pub fn default_escaper_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.escaper_data(esc))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_collect()
 
   assert formatted
     == "Bartholemew,24,\"Huh, it worked. Now only escapers remain.\"\nAlex,23,What are escapers?\nBartholemew,24,\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\""
@@ -98,7 +117,9 @@ pub fn custom_col_normal_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.normal_data())
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_collect()
 
   assert formatted
     == "Alex|23|This is a pretty cool library\nBartholemew|24|Yeah I agree"
@@ -111,7 +132,11 @@ pub fn custom_col_column_separator_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.column_separator_data(col_sep))
+    |> format.preprocess([])
+    |> format.then_run(
+      stream.from_list(mesv_test.column_separator_data(col_sep)),
+    )
+    |> format.then_collect()
 
   assert formatted
     == "Alex|23|This is a pretty good library, don't you think?\nBartholemew|24|\"Yeah, it's pretty good, but are you sure it can handle escaping separators? Try | this. heh\""
@@ -124,7 +149,9 @@ pub fn custom_col_row_separator_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.row_separator_data(row_sep))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_collect()
 
   assert formatted
     == "Alex|23|It should be able to, right?\nBartholemew|24|\"Maybe column separators,\nbut what about row separators?\""
@@ -137,7 +164,9 @@ pub fn custom_col_escaper_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.escaper_data(esc))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_collect()
 
   assert formatted
     == "Bartholemew|24|Huh, it worked. Now only escapers remain.\nAlex|23|What are escapers?\nBartholemew|24|\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\""
@@ -151,7 +180,9 @@ pub fn custom_row_normal_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.normal_data())
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_collect()
 
   assert formatted
     == "Alex,23,This is a pretty cool library|Bartholemew,24,Yeah I agree"
@@ -164,7 +195,11 @@ pub fn custom_row_column_separator_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.column_separator_data(col_sep))
+    |> format.preprocess([])
+    |> format.then_run(
+      stream.from_list(mesv_test.column_separator_data(col_sep)),
+    )
+    |> format.then_collect()
 
   assert formatted
     == "Alex,23,\"This is a pretty good library, don't you think?\"|Bartholemew,24,\"Yeah, it's pretty good, but are you sure it can handle escaping separators? Try , this. heh\""
@@ -177,7 +212,9 @@ pub fn custom_row_row_separator_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.row_separator_data(row_sep))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_collect()
 
   assert formatted
     == "Alex,23,\"It should be able to, right?\"|Bartholemew,24,\"Maybe column separators,|but what about row separators?\""
@@ -190,7 +227,9 @@ pub fn custom_row_escaper_test() -> Nil {
   let esc = "\""
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.escaper_data(esc))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_collect()
 
   assert formatted
     == "Bartholemew,24,\"Huh, it worked. Now only escapers remain.\"|Alex,23,What are escapers?|Bartholemew,24,\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\""
@@ -204,7 +243,9 @@ pub fn custom_esc_normal_test() -> Nil {
   let esc = "'"
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.normal_data())
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_collect()
 
   assert formatted
     == "Alex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"
@@ -217,7 +258,11 @@ pub fn custom_esc_column_separator_test() -> Nil {
   let esc = "'"
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.column_separator_data(col_sep))
+    |> format.preprocess([])
+    |> format.then_run(
+      stream.from_list(mesv_test.column_separator_data(col_sep)),
+    )
+    |> format.then_collect()
 
   assert formatted
     == "Alex,23,'This is a pretty good library, don''t you think?'\nBartholemew,24,'Yeah, it''s pretty good, but are you sure it can handle escaping separators? Try , this. heh'"
@@ -230,7 +275,9 @@ pub fn custom_esc_row_separator_test() -> Nil {
   let esc = "'"
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.row_separator_data(row_sep))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_collect()
 
   assert formatted
     == "Alex,23,'It should be able to, right?'\nBartholemew,24,'Maybe column separators,\nbut what about row separators?'"
@@ -243,7 +290,9 @@ pub fn custom_esc_escaper_test() -> Nil {
   let esc = "'"
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.escaper_data(esc))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_collect()
 
   assert formatted
     == "Bartholemew,24,'Huh, it worked. Now only escapers remain.'\nAlex,23,What are escapers?\nBartholemew,24,'They''re what wrap a value if it contains reserved elements. Right now, it''s '''"
@@ -257,7 +306,9 @@ pub fn combined_normal_test() -> Nil {
   let esc = "'"
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.normal_data())
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_collect()
 
   assert formatted
     == "Alex|23|This is a pretty cool library;Bartholemew|24|Yeah I agree"
@@ -270,7 +321,11 @@ pub fn combined_column_separator_test() -> Nil {
   let esc = "'"
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.column_separator_data(col_sep))
+    |> format.preprocess([])
+    |> format.then_run(
+      stream.from_list(mesv_test.column_separator_data(col_sep)),
+    )
+    |> format.then_collect()
 
   assert formatted
     == "Alex|23|'This is a pretty good library, don''t you think?';Bartholemew|24|'Yeah, it''s pretty good, but are you sure it can handle escaping separators? Try | this. heh'"
@@ -283,7 +338,9 @@ pub fn combined_row_separator_test() -> Nil {
   let esc = "'"
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.row_separator_data(row_sep))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_collect()
 
   assert formatted
     == "Alex|23|It should be able to, right?;Bartholemew|24|'Maybe column separators,;but what about row separators?'"
@@ -296,7 +353,9 @@ pub fn combined_escaper_test() -> Nil {
   let esc = "'"
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
-    |> format.run(mesv_test.escaper_data(esc))
+    |> format.preprocess([])
+    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_collect()
 
   assert formatted
     == "Bartholemew|24|Huh, it worked. Now only escapers remain.;Alex|23|What are escapers?;Bartholemew|24|'They''re what wrap a value if it contains reserved elements. Right now, it''s '''"

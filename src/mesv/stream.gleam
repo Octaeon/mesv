@@ -1,4 +1,5 @@
 import gleam/list
+import gleam/option.{type Option, None, Some}
 
 // ==== Public Types ====
 
@@ -159,6 +160,29 @@ pub fn foldl(stream: Stream(a), fun: fn(a, b) -> b, acc: b) -> b {
   case next(stream) {
     Next(stream, value) -> foldl(stream, fun, fun(value, acc))
     Done -> acc
+  }
+}
+
+/// Consume all of the elements of a `Stream` and join them into a single value,
+/// using the provided function.
+/// 
+/// If the stream is empty, return `Error(Nil)`, and if there's only a single value, return that.
+/// Only if there are two or more elements is the function called.
+/// 
+/// I made this function to imitate the output of the `string.join` function, but since unlike
+/// `String`s, this function works for an arbitrary element, I can't just return an empty string
+/// like `string.join` does. So, under the hood, this function just gets the next step of the
+/// `Stream` once, and then just calls [`foldl`](stream.html#foldl), with the initial accumulator
+/// being the first element of the `Stream`.
+/// 
+/// ## Note
+/// Since this function tries to collect all of the elements of the input `Stream`,
+/// if the `Stream` is infinite, then it will never terminate.
+/// 
+pub fn join(stream: Stream(a), fun: fn(a, a) -> a) -> Result(a, Nil) {
+  case next(stream) {
+    Next(stream, value) -> Ok(foldl(stream, fun, value))
+    Done -> Error(Nil)
   }
 }
 
@@ -362,6 +386,16 @@ pub fn prepend(stream: Stream(a), element: a) -> Stream(a) {
   Stream(fn() { Next(stream, element) })
 }
 
+/// If the provided element is `Some`, add the provided element to the *start* of the Stream
+/// (ie, it will be the next element shown). Otherwise, return the `Stream` unchanged.
+/// 
+pub fn maybe_prepend(stream: Stream(a), maybe_element: Option(a)) -> Stream(a) {
+  case maybe_element {
+    Some(el) -> prepend(stream, el)
+    None -> stream
+  }
+}
+
 /// Add the provided element to the *end* of the Stream (ie, it will be the last element shown)
 /// 
 /// ## Note
@@ -390,4 +424,10 @@ pub fn concat(first: Stream(a), second: Stream(a)) -> Stream(a) {
       Done -> next(second)
     }
   })
+}
+
+pub fn wrap(stream: Stream(a), in element: a) -> Stream(a) {
+  stream
+  |> append(element)
+  |> prepend(element)
 }
