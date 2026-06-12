@@ -65,7 +65,9 @@
 
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/string
+import mesv/stream.{type Stream}
 import mesv/util
 
 // ==== Public Types ====
@@ -389,30 +391,22 @@ pub fn set_escape_all(parser: Formatter(a), escape_all: Bool) -> Formatter(a) {
 pub fn preprocess(
   formatter: Formatter(a),
   metadata: List(#(String, String)),
-) -> #(Formatter(a), String) {
+) -> #(Formatter(a), Stream(String)) {
   case metadata {
-    [] -> #(formatter, "")
+    [] -> #(formatter, stream.empty())
     non_empty -> {
-      let metadata =
-        non_empty
-        |> list.map(make_metadata_formatter(formatter))
-        |> string.join("")
-        |> wrap(in: "---" <> formatter.row_separator)
+      let metadata_stream =
+        stream.from_list(non_empty)
+        |> stream.map(make_metadata_formatter(formatter))
+        |> stream.wrap(in: "---")
       case formatter.headers {
         Some(headers) -> {
-          #(
-            Formatter(..formatter, headers: None),
-            metadata
-              <> {
-              headers
-              |> make_whitespace_processor(formatter)
-              |> list.map(make_ensafeify(formatter, Data))
-              |> string.join(formatter.column_separator)
-            }
-              <> formatter.row_separator,
-          )
+          let stream =
+            metadata_stream
+            |> stream.append(make_row_processor(formatter)(headers))
+          #(Formatter(..formatter, headers: None), stream)
         }
-        None -> #(formatter, metadata)
+        None -> #(formatter, metadata_stream)
       }
     }
   }
@@ -422,10 +416,30 @@ pub fn preprocess(
 /// function to format metadata using a configured `Formatter`. Use it just as you would
 /// the [`format.run`](format.html#run) function, just only after calling the `preprocess`.
 /// 
-pub fn then(in: #(Formatter(a), String), format: List(a)) -> String {
-  let #(formatter, string) = in
+pub fn then_run(
+  in: #(Formatter(a), Stream(String)),
+  data: Stream(a),
+) -> Stream(String) {
+  let #(formatter, metadata_stream) = in
+  stream.concat(metadata_stream, run(formatter, data))
+}
 
-  string <> run(formatter, format)
+pub fn add_row_sep(
+  stream: Stream(String),
+  separator sep: String,
+) -> Stream(String) {
+  stream |> stream.map(fn(row) { row <> sep })
+}
+
+/// Helper function to use after calling the [`format.then_run`](format.html#then_run),
+/// which joins the `Stream(String)` - the `Stream` or formatted rows - into a single `String`.
+/// 
+/// It takes in the `Formatter` just to know what to put in between rows as the separator.
+/// 
+pub fn then_join(stream: Stream(String), with separator: String) -> String {
+  stream
+  |> stream.join(fn(row, previous) { previous <> separator <> row })
+  |> result.unwrap("")
 }
 
 /// Execution function that takes in a `Formatter(a)` as well as a `List(a)`, and encodes
@@ -442,29 +456,11 @@ pub fn then(in: #(Formatter(a), String), format: List(a)) -> String {
 /// reuse the original one while still using the metadata `String` returned by `preprocess`,
 /// the headers will not be duplicated.
 /// 
-pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
-  let Formatter(
-    column_separator,
-    row_separator,
-    _escaper,
-    _metadata_separator,
-    _escape_all,
-    maybe_headers,
-    _whitespace,
-    to_string,
-  ) = formatter
-
-  case maybe_headers {
-    Some(headers) -> [headers, ..elements |> list.map(to_string)]
-    None -> elements |> list.map(to_string)
-  }
-  |> list.map(fn(values: List(String)) -> String {
-    values
-    |> make_whitespace_processor(formatter)
-    |> list.map(make_ensafeify(formatter, Data))
-    |> string.join(column_separator)
-  })
-  |> string.join(row_separator)
+pub fn run(formatter: Formatter(a), elements: Stream(a)) -> Stream(String) {
+  elements
+  |> stream.map(make_encoder(formatter))
+  |> stream.maybe_prepend(get_headers(formatter))
+  |> stream.map(make_row_processor(formatter))
 }
 
 /// > **This function is deprecated, and should be replaced with the
@@ -479,10 +475,21 @@ function to `run`. This function is still available to call, but should be repla
 In new code, use the `run` function.
 ")
 pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
-  run(formatter, elements)
+  run(formatter, elements |> stream.from_list())
+  |> stream.join(fn(row, previous) {
+    previous <> formatter.row_separator <> row
+  })
+  |> result.unwrap("")
 }
 
 // ==== Private Functions ====
+
+fn make_whitespace_processor(
+  formatter: Formatter(a),
+) -> fn(List(String)) -> List(String) {
+  let WhitespaceBehaviour(default, specified) = formatter.whitespace
+  util.map2_default_option(_, specified, default, process_cell_whitespace)
+}
 
 fn process_cell_whitespace(
   cell: String,
@@ -500,48 +507,7 @@ fn process_cell_whitespace(
   }
 }
 
-fn make_whitespace_processor(
-  formatter: Formatter(a),
-) -> fn(List(String)) -> List(String) {
-  let WhitespaceBehaviour(default, specified) = formatter.whitespace
-  util.map2_default_option(_, specified, default, process_cell_whitespace)
-}
-
-/// Internal helper function for creating a function that checks if a specific element needs
-/// to be escaped (wrapped in escaper, which by default is `"`) before being written to file.
-/// 
-/// It's a curried function because I like functional programming, and because it *should*
-/// give some performance improvements if I create such a function before any looping instead
-/// of constructing one for each iteration.
-/// 
-fn needs_escaping(prohibited: List(String)) -> fn(String) -> Bool {
-  fn(el: String) -> Bool {
-    prohibited
-    |> list.any(fn(s: String) -> Bool { string.contains(el, s) })
-  }
-}
-
-/// Internal helper function for creating a function that wraps a String in the specified
-/// 'escaper' String.
-/// 
-/// It's a curried function because I like functional programming, and because it *should*
-/// give some performance improvements if I create such a function before any looping instead
-/// of constructing one for each iteration.
-/// 
-fn wrap(in in: String) -> fn(String) -> String {
-  fn(el: String) -> String { in <> el <> in }
-}
-
-fn escapeify(formatter: Formatter(a)) -> fn(String) -> String {
-  let escaper = formatter.escaper
-  fn(el: String) -> String {
-    el
-    |> util.multi_replace([#(escaper, escaper <> escaper)])
-    |> wrap(in: escaper)
-  }
-}
-
-fn make_to_escape(
+fn make_needs_escaping(
   formatter: Formatter(a),
   field: EscapeWhich,
 ) -> fn(String) -> Bool {
@@ -561,18 +527,59 @@ fn make_to_escape(
       "\r",
     ]
   }
-  |> needs_escaping()
+  |> make_contains_prohibited()
 }
 
-fn make_ensafeify(
+/// Internal helper function for creating a function that checks if a specific element needs
+/// to be escaped (wrapped in escaper, which by default is `"`) before being written to file.
+/// 
+/// It's a curried function because I like functional programming, and because it *should*
+/// give some performance improvements if I create such a function before any looping instead
+/// of constructing one for each iteration.
+/// 
+fn make_contains_prohibited(prohibited: List(String)) -> fn(String) -> Bool {
+  fn(cell: String) -> Bool {
+    prohibited
+    |> list.any(fn(prohibited_element: String) -> Bool {
+      string.contains(cell, prohibited_element)
+    })
+  }
+}
+
+/// Internal helper function for creating a function that wraps a String in the specified
+/// 'escaper' String.
+/// 
+/// It's a curried function because I like functional programming, and because it *should*
+/// give some performance improvements if I create such a function before any looping instead
+/// of constructing one for each iteration.
+/// 
+fn wrap(in in: String) -> fn(String) -> String {
+  fn(el: String) -> String { in <> el <> in }
+}
+
+fn make_escaper(formatter: Formatter(a)) -> fn(String) -> String {
+  let escaper = formatter.escaper
+  let duplicate = util.multi_replace([#(escaper, escaper <> escaper)])
+  fn(el: String) -> String {
+    el
+    |> duplicate()
+    |> wrap(in: escaper)
+  }
+}
+
+fn make_cell_processor(
   formatter: Formatter(a),
   field: EscapeWhich,
 ) -> fn(String) -> String {
-  let ensafeify = escapeify(formatter)
-  fn(val: String) -> String {
-    case formatter.escape_all || make_to_escape(formatter, field)(val) {
-      True -> ensafeify(val)
-      False -> val
+  let escape = make_escaper(formatter)
+  let needs_escaping = make_needs_escaping(formatter, field)
+  case formatter.escape_all {
+    True -> escape
+    False -> fn(val: String) -> String {
+      case needs_escaping(val) {
+        True -> escape(val)
+        False -> val
+      }
     }
   }
 }
@@ -580,11 +587,31 @@ fn make_ensafeify(
 fn make_metadata_formatter(
   formatter: Formatter(a),
 ) -> fn(#(String, String)) -> String {
-  let ensafeify = make_ensafeify(formatter, Metadata)
+  let process = make_cell_processor(formatter, Metadata)
   fn(metadata: #(String, String)) -> String {
-    ensafeify(metadata.0)
-    <> ":"
-    <> ensafeify(metadata.1)
-    <> formatter.row_separator
+    process(metadata.0) <> formatter.metadata_separator <> process(metadata.1)
+  }
+}
+
+fn make_encoder(formatter: Formatter(a)) -> fn(a) -> List(String) {
+  formatter.formatter
+}
+
+fn get_headers(formatter: Formatter(a)) -> Option(List(String)) {
+  formatter.headers
+}
+
+fn make_row_ensafer(
+  formatter: Formatter(a),
+) -> fn(List(String)) -> List(String) {
+  list.map(_, make_cell_processor(formatter, Data))
+}
+
+fn make_row_processor(formatter: Formatter(a)) -> fn(List(String)) -> String {
+  fn(cells: List(String)) -> String {
+    cells
+    |> make_whitespace_processor(formatter)
+    |> make_row_ensafer(formatter)
+    |> string.join(with: formatter.column_separator)
   }
 }

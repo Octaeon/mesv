@@ -212,6 +212,9 @@ pub type DataRowError(a) {
 
 pub type CsvSource {
   Text(String)
+  /// If your pass in this variant of the source to `preprocess`, it is up to you to guarantee
+  /// that the rows are split on the specified row separators.
+  /// 
   RowStream(Stream(String))
 }
 
@@ -768,7 +771,7 @@ pub fn preprocess(
   parser: Parser(a, e),
   source: CsvSource,
 ) -> Result(
-  #(List(#(String, String)), Parser(a, e), CsvSource),
+  #(List(#(String, String)), Parser(a, e), Stream(List(String))),
   PreprocessingError,
 ) {
   use #(row_stream, metadata) <- result.try(
@@ -778,28 +781,23 @@ pub fn preprocess(
     }
     |> make_metadata_reader(parser),
   )
-
+  let split_columns = make_column_splitter(parser)
   let process_headers = make_header_processor(parser)
+
+  let row_stream =
+    row_stream
+    |> stream.map(split_columns)
 
   case stream.next(row_stream) {
     Next(stream, value) -> {
-      use row_stream <- result.try(
-        case
-          process_headers(
-            parser.expect_headers,
-            make_column_splitter(parser)(value),
-          )
-        {
-          Ok(SkipFirstRow) -> Ok(stream)
-          Ok(ParseFirstRow) -> Ok(stream.prepend(stream, value))
-          Error(err) -> Error(err)
-        },
-      )
-      Ok(#(
-        metadata,
-        parser |> set_expected_headers(Empty),
-        RowStream(row_stream),
-      ))
+      result.try(process_headers(parser.expect_headers, value), fn(act) {
+        Ok(
+          #(metadata, parser |> set_expected_headers(Empty), case act {
+            ParseFirstRow -> stream |> stream.prepend(value)
+            SkipFirstRow -> stream
+          }),
+        )
+      })
     }
     Done -> Error(SourceEmpty)
   }
@@ -838,13 +836,13 @@ pub fn preprocess(
 /// // -> Error(...) identical error as above, nothing happens.
 /// ```
 /// 
-pub fn then(
+pub fn then_run(
   preprocessed: Result(
-    #(List(#(String, String)), Parser(a, e), CsvSource),
+    #(List(#(String, String)), Parser(a, e), Stream(List(String))),
     PreprocessingError,
   ),
 ) -> Result(
-  #(List(#(String, String)), List(Result(a, DataRowError(e)))),
+  #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
   PreprocessingError,
 ) {
   preprocessed
@@ -889,77 +887,93 @@ pub fn then(
 /// 
 pub fn run(
   parser: Parser(a, e),
-  source: CsvSource,
-) -> List(Result(a, DataRowError(e))) {
-  case make_row_splitter(parser)(source) {
-    // Empty file - just return an empty list.
-    [] -> []
-    contents -> {
-      // A locally defined function capturing the parser data, that is used for processing each row
-      let process_row = fn(cells: List(String)) -> Result(a, DataRowError(e)) {
-        cells
-        // Unescape the String - ie, if the escape characters are present both at the beginning
-        // and end of the String, remove them, and deduplicate any internal escapers.
-        // If only one end of the String has an escaper, throw a Parsing error for this row.
-        |> list.map(make_unescaper(parser))
-        // Only proceed if all cells in this row are unwrapped
-        |> result.all()
-        |> result.try(fn(elements: List(String)) -> Result(a, DataRowError(e)) {
-          elements
-          // Trim white space according to the rules set.
-          // By this point, the string is unwrapped and unescaped, so what to do with it
-          // is up to the user.
-          |> list.map(make_content_trimmer(parser))
-          // Call the Parsing function to convert the `List(String)` of elements
-          // (already unescaped, unwrapped and trimmed) to try and convert it into
-          // the desired data type `a`.
-          |> parser.parse()
-          // If the parsing step succeeded, check whether there were any leftovers,
-          // and depending on the parser settings, either proceed or throw an error.
-          |> result.try(make_finalizer(parser))
-        })
-      }
-
-      contents
-      |> list.map(fn(row_string) {
-        // All of the parsing functions are condensed here to avoid having to map multiple times.
-        row_string
-        |> make_column_splitter(parser)
-        |> process_row()
-      })
-    }
+  source: Stream(List(String)),
+) -> Stream(Result(a, DataRowError(e))) {
+  let unescape = make_unescaper(parser)
+  let trim = make_content_trimmer(parser)
+  let finalize = make_finalizer(parser)
+  let process_row = fn(cells: List(String)) -> Result(a, DataRowError(e)) {
+    cells
+    // Unescape the String - ie, if the escape characters are present both at the beginning
+    // and end of the String, remove them, and deduplicate any internal escapers.
+    // If only one end of the String has an escaper, throw a Parsing error for this row.
+    |> list.map(unescape)
+    // Only proceed if all cells in this row are unwrapped
+    |> result.all()
+    |> result.try(fn(values: List(String)) {
+      values
+      // Trim white space according to the rules set.
+      // By this point, the string is unwrapped and unescaped, so what to do with it
+      // is up to the user.
+      |> list.map(trim)
+      // Call the Parsing function to convert the `List(String)` of values
+      // (already unescaped, unwrapped and trimmed) to try and convert it into
+      // the desired data type `a`.
+      |> parser.parse()
+      // If the parsing step succeeded, check whether there were any leftovers,
+      // and depending on the parser settings, either proceed or throw an error.
+      |> result.try(finalize)
+    })
   }
+  source
+  |> stream.map(process_row)
 }
 
-/// > **This function is deprecated, and should be replaced by using the
-///   [`parse.preprocess`](parse.html#preprocess) and [`parse.run`](parse.html#run)
-///   functions in that order.**
+pub fn then_collect(
+  in: Result(
+    #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
+    PreprocessingError,
+  ),
+) -> Result(
+  #(List(#(String, String)), List(Result(a, DataRowError(e)))),
+  PreprocessingError,
+) {
+  result.map(in, fn(out) {
+    let #(metadata, stream) = out
+    #(metadata, stream.to_list(stream))
+  })
+}
+
+pub fn then_collect_data(
+  in: Result(
+    #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
+    PreprocessingError,
+  ),
+) -> Result(List(Result(a, DataRowError(e))), PreprocessingError) {
+  result.map(in, fn(out) { stream.to_list(out.1) })
+}
+
+/// A helper function meant to be called with the output of [`parse.then`](parse.html#then)
+/// as the input.
 /// 
-/// Function to use the specified `Parser(a, e)` to transform the source into a `#(List(a),
-/// List(ParsingError))`.
+/// It should only be used if you're sure that you only want the successfully parsed data
+/// rows, and don't care about any errors or any of the metadata.
 /// 
-/// To follow the expected previous behaviour, it returns a `Result(#(List(a),
-/// List(ParsingError)), ParsingError)`, obtained by calling `result.partition` on
-/// the list of `Result(a, ParsingError)` from parsing rows.
+/// Due to this, it should not be used in situations where errors must be handled.
 /// 
-@deprecated("
-To simplify the API and comply with the Gleam convention, I have decided to split this function
-into `preprocess` and `run`.
-For ease of use, there also exists `then`, which calls `run` using the output from `preprocess`.
-Use those functions instead of this one.
-")
-pub fn parse(
-  parser: Parser(a, e),
-  source: String,
-) -> Result(#(List(a), List(DataRowError(e))), PreprocessingError) {
-  preprocess(parser, Text(source))
-  |> result.map(fn(preprocess_out) {
-    // Using this function means ignoring the parsed metadata
-    let #(_metadata, parser, csv_source) = preprocess_out
-    run(parser, csv_source)
-    |> result.partition
-    |> pair.map_first(list.reverse)
-    |> pair.map_second(list.reverse)
+/// Additionally, it is also quite unfriendly for debugging, as the errors are simply discarded.
+/// 
+/// ## Examples
+/// ```gleam
+/// parser
+/// |> parse.preprocess(Text("some,data,123\nmalformed\"data!"))
+/// |> parse.then()
+/// |> parse.just_data()
+/// // -> Ok([Ok("some", "data", 123)])
+/// // Malformed data is parsed into `Error`s and discarded.
+/// ```
+/// 
+pub fn then_collect_parsed(
+  processed: Result(
+    #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
+    PreprocessingError,
+  ),
+) -> Result(List(a), PreprocessingError) {
+  processed
+  |> result.map(fn(output) {
+    output.1
+    |> get_parsed()
+    |> stream.to_list()
   })
 }
 
@@ -985,42 +999,43 @@ pub fn parse(
 /// Of course, this is all under the assumption that the parsing succeeded initially
 /// and started execution.
 /// 
-pub fn get_parsed(rows: List(Result(a, DataRowError(e)))) -> List(a) {
+pub fn get_parsed(rows: Stream(Result(a, DataRowError(e)))) -> Stream(a) {
   rows
-  |> list.filter_map(function.identity)
+  |> stream.filter_map(function.identity)
 }
 
-/// A helper function meant to be called with the output of [`parse.then`](parse.html#then)
-/// as the input.
+/// > **This function is deprecated, and should be replaced by using the
+///   [`parse.preprocess`](parse.html#preprocess) and [`parse.run`](parse.html#run)
+///   functions in that order.**
 /// 
-/// It should only be used if you're sure that you only want the successfully parsed data
-/// rows, and don't care about any errors or any of the metadata.
+/// Function to use the specified `Parser(a, e)` to transform the source into a `#(List(a),
+/// List(ParsingError))`.
 /// 
-/// Due to this, it should not be used in situations where errors must be handled.
+/// To follow the expected previous behaviour, it returns a `Result(#(List(a),
+/// List(ParsingError)), ParsingError)`, obtained by calling `result.partition` on
+/// the list of `Result(a, ParsingError)` from parsing rows.
 /// 
-/// Additionally, it is also quite unfriendly for debugging, as the errors are simply discarded.
-/// 
-/// ## Examples
-/// ```gleam
-/// parser
-/// |> parse.preprocess(Text("some,data,123\nmalformed\"data!"))
-/// |> parse.then()
-/// |> parse.just_data()
-/// // -> Ok([Ok("some", "data", 123)])
-/// // Malformed data is parsed into `Error`s and discarded.
-/// ```
-/// 
-pub fn just_data(
-  processed: Result(
-    #(List(#(String, String)), List(Result(a, DataRowError(e)))),
-    PreprocessingError,
-  ),
-) -> Result(List(a), PreprocessingError) {
-  processed
-  |> result.map(fn(output) {
-    let #(_metadata, results) = output
-    results
-    |> get_parsed()
+@deprecated("
+To simplify the API and comply with the Gleam convention, I have decided to split this function
+into `preprocess` and `run`.
+For ease of use, there also exists `then`, which calls `run` using the output from `preprocess`.
+Use those functions instead of this one.
+")
+pub fn parse(
+  parser: Parser(a, e),
+  source: String,
+) -> Result(#(List(a), List(DataRowError(e))), PreprocessingError) {
+  parser
+  |> preprocess(Text(source))
+  |> result.map(fn(preprocess_out) {
+    // Using this function means ignoring the parsed metadata
+    let #(_metadata, parser, row_stream) = preprocess_out
+    parser
+    |> run(row_stream)
+    |> stream.to_list()
+    |> result.partition()
+    |> pair.map_first(list.reverse)
+    |> pair.map_second(list.reverse)
   })
 }
 
@@ -1236,22 +1251,6 @@ fn make_row_stream(parser: Parser(a, e)) -> fn(String) -> Stream(String) {
   }
 }
 
-/// Internal function for creating a row splitting function directly from a `Parser`.
-/// 
-fn make_row_splitter(parser: Parser(a, e)) -> fn(CsvSource) -> List(String) {
-  fn(source: CsvSource) -> List(String) {
-    case source {
-      Text(str) ->
-        str
-        |> util.split_on_unescaped(
-          separator: parser.row_separator,
-          not_in: parser.escaper,
-        )
-      RowStream(stream) -> stream |> stream.to_list()
-    }
-  }
-}
-
 /// Internal function for creating a column splitting function directly from a `Parser`.
 /// 
 fn make_column_splitter(parser: Parser(a, e)) -> fn(String) -> List(String) {
@@ -1416,6 +1415,10 @@ fn make_metadata_parser(
   }
 }
 
+/// A shitty solution to the problem I was having.
+/// 
+/// TODO : Rethink this structure maybe?
+/// 
 fn data_row_to_metadata_row(err: DataRowError(e)) -> MetadataRowError {
   case err {
     DataUnescapedEscapers(field) -> MetadataUnescapedEscapers(field)

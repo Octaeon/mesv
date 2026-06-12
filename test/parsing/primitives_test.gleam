@@ -14,7 +14,9 @@ pub fn integer_base_10_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(decode.integer)
-    |> parse.run(Text("1\n2\na\n1.2\n"))
+    |> parse.preprocess(Text("1\n2\na\n1.2\n"))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok(1),
@@ -38,14 +40,16 @@ pub fn integer_base_10_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | Integer, base 10"
+  assert parsed == Ok(expected) as "Parsing Primitives | Integer, base 10"
 }
 
 pub fn integer_base_2_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(decode.integer_binary)
-    |> parse.run(Text("1\n10\n1001\n12"))
+    |> parse.preprocess(Text("1\n10\n1001\n12"))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok(1),
@@ -57,14 +61,16 @@ pub fn integer_base_2_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | Integer, base 2"
+  assert parsed == Ok(expected) as "Parsing Primitives | Integer, base 2"
 }
 
 pub fn integer_base_16_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(decode.integer_hex)
-    |> parse.run(Text("1\n10\n1001\nFF\nf\nF\n1.f"))
+    |> parse.preprocess(Text("1\n10\n1001\nFF\nf\nF\n1.f"))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok(1),
@@ -84,14 +90,16 @@ pub fn integer_base_16_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | Integer, base 16"
+  assert parsed == Ok(expected) as "Parsing Primitives | Integer, base 16"
 }
 
 pub fn integer_arbitrary_base_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(decode.integer_arbitrary_base(7))
-    |> parse.run(Text("1\n10\n2004\nFF\n1.0"))
+    |> parse.preprocess(Text("1\n10\n2004\nFF\n1.0"))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok(1),
@@ -112,14 +120,17 @@ pub fn integer_arbitrary_base_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | Integer, arbitrary base"
+  assert parsed == Ok(expected)
+    as "Parsing Primitives | Integer, arbitrary base"
 }
 
 pub fn float_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(decode.float)
-    |> parse.run(Text("1\n10\n100.1\n1.f\n.00001\n.10.0\n"))
+    |> parse.preprocess(Text("1\n10\n100.1\n1.f\n.00001\n.10.0\n"))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok(1.0),
@@ -142,16 +153,18 @@ pub fn float_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | Float"
+  assert parsed == Ok(expected) as "Parsing Primitives | Float"
 }
 
 pub fn character_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(decode.char)
-    |> parse.run(Text(
+    |> parse.preprocess(Text(
       "1\n2\na\n1.2\nthere can be whitespace\n   !   \nIt's just trimmed\n",
     ))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok("1"),
@@ -186,14 +199,16 @@ pub fn character_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | Integer, base 10"
+  assert parsed == Ok(expected) as "Parsing Primitives | Integer, base 10"
 }
 
 pub fn optional_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(decode.integer |> decode.option())
-    |> parse.run(Text("1\n\na\n1.2"))
+    |> parse.preprocess(Text("1\n\na\n1.2"))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok(Some(1)),
@@ -213,14 +228,16 @@ pub fn optional_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | Optional parsing"
+  assert parsed == Ok(expected) as "Parsing Primitives | Optional parsing"
 }
 
 pub fn attempt_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(decode.integer |> decode.attempt())
-    |> parse.run(Text("1\n\na\n1.2"))
+    |> parse.preprocess(Text("1\n\na\n1.2"))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok(Some(1)),
@@ -229,14 +246,16 @@ pub fn attempt_test() -> Nil {
     Ok(None),
   ]
 
-  assert parsed == expected as "Parsing Primitives | Attempt parsing"
+  assert parsed == Ok(expected) as "Parsing Primitives | Attempt parsing"
 }
 
 pub fn map_test() -> Nil {
   let parsed =
     parse.build(function.identity)
     |> parse.column(decode.integer |> decode.map(fn(i) { i >= 18 }))
-    |> parse.run(Text("1\n\n20\n21.2\na\n\"I'm an adult, I swear!\""))
+    |> parse.preprocess(Text("1\n\n20\n21.2\na\n\"I'm an adult, I swear!\""))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok(False),
@@ -274,7 +293,7 @@ pub fn map_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | 'Map' transformation"
+  assert parsed == Ok(expected) as "Parsing Primitives | 'Map' transformation"
 }
 
 pub fn try_test() -> Nil {
@@ -290,7 +309,11 @@ pub fn try_test() -> Nil {
         })
       }),
     )
-    |> parse.run(Text("nope\nno_spaces_here\nokay have_one\nmaybe even two"))
+    |> parse.preprocess(Text(
+      "nope\nno_spaces_here\nokay have_one\nmaybe even two",
+    ))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Error(CellParsingFailed(
@@ -315,7 +338,7 @@ pub fn try_test() -> Nil {
     Ok(#("maybe", "even two")),
   ]
 
-  assert parsed == expected as "Parsing Primitives | 'Try' transformation"
+  assert parsed == Ok(expected) as "Parsing Primitives | 'Try' transformation"
 }
 
 pub fn list_basic_test() -> Nil {
@@ -325,9 +348,11 @@ pub fn list_basic_test() -> Nil {
       decode.bool(False)
       |> decode.array(#("[", "]"), "."),
     )
-    |> parse.run(Text(
+    |> parse.preprocess(Text(
       "[true.false.true]\n[no.yes]\n[1.1.1.1]\n[True.1.False.0.Yes.NO]",
     ))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok([True, False, True]),
@@ -336,7 +361,7 @@ pub fn list_basic_test() -> Nil {
     Ok([True, True, False, False, True, False]),
   ]
 
-  assert parsed == expected as "Parsing Primitives | List, basic"
+  assert parsed == Ok(expected) as "Parsing Primitives | List, basic"
 }
 
 pub fn list_basic_strict_test() -> Nil {
@@ -346,9 +371,11 @@ pub fn list_basic_strict_test() -> Nil {
       decode.bool(True)
       |> decode.array(#("[", "]"), "."),
     )
-    |> parse.run(Text(
+    |> parse.preprocess(Text(
       "[true.false.true]\n[no.yes]\n[1.1.1.1]\n[True.1.False.0.Yes.NO]",
     ))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok([True, False, True]),
@@ -381,7 +408,7 @@ pub fn list_basic_strict_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | List, basic strict"
+  assert parsed == Ok(expected) as "Parsing Primitives | List, basic strict"
 }
 
 pub fn list_basic_errors_test() -> Nil {
@@ -391,7 +418,11 @@ pub fn list_basic_errors_test() -> Nil {
       decode.bool(False)
       |> decode.array(#("[", "]"), "."),
     )
-    |> parse.run(Text("[  true.  false  .  true  ]\ntrue.true.true\n[.true]"))
+    |> parse.preprocess(Text(
+      "[  true.  false  .  true  ]\ntrue.true.true\n[.true]",
+    ))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok([True, False, True]),
@@ -415,7 +446,7 @@ pub fn list_basic_errors_test() -> Nil {
     )),
   ]
 
-  assert parsed == expected as "Parsing Primitives | List, basic errors"
+  assert parsed == Ok(expected) as "Parsing Primitives | List, basic errors"
 }
 
 pub fn list_composite_parser_test() -> Nil {
@@ -426,7 +457,11 @@ pub fn list_composite_parser_test() -> Nil {
       |> decode.attempt()
       |> decode.array(#("[", "]"), "."),
     )
-    |> parse.run(Text("[  true.  false  .  true  ]\ntrue.true.true\n[.true]"))
+    |> parse.preprocess(Text(
+      "[  true.  false  .  true  ]\ntrue.true.true\n[.true]",
+    ))
+    |> parse.then_run()
+    |> parse.then_collect_data()
 
   let expected = [
     Ok([Some(True), Some(False), Some(True)]),
@@ -442,5 +477,6 @@ pub fn list_composite_parser_test() -> Nil {
     Ok([None, Some(True)]),
   ]
 
-  assert parsed == expected as "Parsing Primitives | List, composite parsers"
+  assert parsed == Ok(expected)
+    as "Parsing Primitives | List, composite parsers"
 }
