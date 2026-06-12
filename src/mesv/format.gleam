@@ -239,17 +239,37 @@ pub fn init() -> Formatter(a) {
   )
 }
 
+/// Add a column to the Formatter.
+/// 
+/// The `column_name` argument will be the header for this column.
+/// 
+/// The `whitespace` argument specifies how the whitespace should be handled (if it's `None`,
+/// the default behaviour will be used. To change the default behaviour, use the
+/// [`set_default_whitespace`](format.html#set_default_whitespace) function).
+/// 
+/// Lastly, the `format_col` argument is the function that takes in the data type for this
+/// row and outputs the `String` that represents one part of that data. For convenience,
+/// you can use the [`encode`](format/encode.html) module to not have to write functions for
+/// all the primitives, but also more complex data types like `Option` or `List`.
+/// 
 pub fn column(
   formatter: Formatter(a),
   column_name: String,
   whitespace: Option(ColumnWhitespaceBehaviour),
   format_col: fn(a) -> String,
 ) -> Formatter(a) {
-  let WhitespaceBehaviour(def, cols) = formatter.whitespace
+  let WhitespaceBehaviour(default, specified) = formatter.whitespace
+  // I thought about making the formatter have the column names, specified whitespace
+  // and what-not as reversed lists, so the syntax would be cleaner, but it's dumb to
+  // prioritise making the syntax in the builder functions cleaner, which will run at most
+  // once, over making the actually important code in the execution functions performant
   Formatter(
     ..formatter,
     headers: formatter.headers |> option.map(list.append(_, [column_name])),
-    whitespace: WhitespaceBehaviour(def, list.append(cols, [whitespace])),
+    whitespace: WhitespaceBehaviour(
+      default,
+      list.append(specified, [whitespace]),
+    ),
     formatter: fn(value: a) -> List(String) {
       value
       |> formatter.formatter()
