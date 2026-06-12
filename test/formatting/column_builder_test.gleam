@@ -1,13 +1,16 @@
 import gleam/int
+import gleam/option.{None}
 import mesv/format
 import mesv_test.{type RowData}
 
 pub fn default_normal_test() -> Nil {
   let formatted =
     format.init()
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.preprocess([])
     |> format.then(mesv_test.normal_data())
 
@@ -20,9 +23,11 @@ pub fn default_column_separator_test() -> Nil {
   let col_sep = ","
   let formatted =
     format.init()
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.preprocess([])
     |> format.then(mesv_test.column_separator_data(col_sep))
@@ -37,9 +42,11 @@ pub fn default_row_separator_test() -> Nil {
   let row_sep = "\n"
   let formatted =
     format.init()
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_row_sep(row_sep)
     |> format.preprocess([])
     |> format.then(mesv_test.row_separator_data(row_sep))
@@ -53,9 +60,11 @@ pub fn default_escaper_test() -> Nil {
   let esc = "\""
   let formatted =
     format.init()
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then(mesv_test.escaper_data(esc))
@@ -68,9 +77,11 @@ pub fn default_escaper_test() -> Nil {
 pub fn rearranged_normal_test() -> Nil {
   let formatted =
     format.init()
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.preprocess([])
     |> format.then(mesv_test.normal_data())
 
@@ -83,9 +94,11 @@ pub fn rearranged_column_separator_test() -> Nil {
   let col_sep = ","
   let formatted =
     format.init()
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.preprocess([])
     |> format.then(mesv_test.column_separator_data(col_sep))
@@ -100,9 +113,11 @@ pub fn rearranged_row_separator_test() -> Nil {
   let row_sep = "\n"
   let formatted =
     format.init()
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_row_sep(row_sep)
     |> format.preprocess([])
     |> format.then(mesv_test.row_separator_data(row_sep))
@@ -116,9 +131,11 @@ pub fn rearranged_escaper_test() -> Nil {
   let esc = "\""
   let formatted =
     format.init()
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then(mesv_test.escaper_data(esc))
@@ -134,9 +151,11 @@ pub fn custom_normal_test() -> Nil {
   let esc = "'"
   let formatted =
     format.init()
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
@@ -154,9 +173,11 @@ pub fn custom_column_separator_test() -> Nil {
   let esc = "'"
   let formatted =
     format.init()
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
@@ -175,9 +196,11 @@ pub fn custom_row_separator_test() -> Nil {
   let esc = "'"
   let formatted =
     format.init()
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
@@ -195,9 +218,11 @@ pub fn custom_escaper_test() -> Nil {
   let esc = "'"
   let formatted =
     format.init()
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
@@ -215,9 +240,11 @@ pub fn custom_rearranged_normal_test() -> Nil {
   let esc = "'"
   let formatted =
     format.init()
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
@@ -235,9 +262,11 @@ pub fn custom_rearranged_column_separator_test() -> Nil {
   let esc = "'"
   let formatted =
     format.init()
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
@@ -256,9 +285,11 @@ pub fn custom_rearranged_row_separator_test() -> Nil {
   let esc = "'"
   let formatted =
     format.init()
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
@@ -276,9 +307,11 @@ pub fn custom_rearranged_escaper_test() -> Nil {
   let esc = "'"
   let formatted =
     format.init()
-    |> format.column("Age", fn(row: RowData) { row.age |> int.to_string() })
-    |> format.column("Name", fn(row: RowData) { row.name })
-    |> format.column("Comment", fn(row: RowData) { row.comment })
+    |> format.column("Age", None, fn(row: RowData) {
+      row.age |> int.to_string()
+    })
+    |> format.column("Name", None, fn(row: RowData) { row.name })
+    |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_col_sep(col_sep)
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)

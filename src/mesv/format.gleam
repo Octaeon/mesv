@@ -72,9 +72,12 @@ import mesv/util
 
 /// The type describing how to convert a specified data type `a` into String form.
 /// 
-/// To create it, use the [`format.build`](format.html#build) function and the provided transformation functions (`set_row_sep`, `set_col_sep`, `set_headers`, `set_escaper`) to configure the specific behaviour.
+/// To create it, use the [`format.build`](format.html#build) function and the provided
+/// transformation functions (`set_row_sep`, `set_col_sep`, `set_headers`, `set_escaper`)
+/// to configure the specific behaviour.
 /// 
-/// Once you have the required `Formatter(a)`, use the [`format.run`](format.html#run) function to convert a `List(a)` into a String.
+/// Once you have the required `Formatter(a)`, use the [`format.run`](format.html#run)
+/// function to convert a `List(a)` into a String.
 /// 
 pub opaque type Formatter(a) {
   Formatter(
@@ -83,23 +86,85 @@ pub opaque type Formatter(a) {
     escaper: String,
     metadata_separator: String,
     escape_all: Bool,
-    column_data: #(RowWhitespaceBehaviour, Option(List(String))),
+    headers: Option(List(String)),
+    whitespace: WhitespaceBehaviour,
     formatter: fn(a) -> List(String),
   )
 }
 
+/// Type specifying how to deal with the whitespace of cells in a specific column
+/// (whitespace **around** the value, not inside).
+/// 
+/// By default, the `Formatter` is initialized with the `DoNothing` variant.
+/// 
+/// ## Note
+/// The transformations described by this type occur after a value representing
+/// a single row has been transformed into a `List(String)` of individual cells,
+/// but before they were escaped and wrapped.
+/// 
+/// ## Another note
+/// You might notice there is no option to pad all cells to the width of the widest
+/// value in a column. This is because this library is aimed at eventually allowing
+/// fully streamlined parsing and formatting of huge CSV files, which are never
+/// all in the program's memory. 
+/// 
+/// To implement a feature like that, there would need to be *two* passes when
+/// formatting - first to find the longest values in each column, then another
+/// to actually parse them.
+/// 
+/// I am of the opinion that the benefits such a feature would bring do not outweigh
+/// the complexity necessary to implement it, and so have decided not to provide it.
+/// 
 pub type ColumnWhitespaceBehaviour {
+  /// As said, do nothing with the whitespace surrounding a cell;
+  /// Pass the `String` along as is.
+  /// 
   DoNothing
+  /// Trim both sides of the formatted value before passing it along.
+  /// 
   TrimAll
+  /// Trim only the start of the formatted value, so that the column is Left aligned.
+  /// 
+  /// Of course, that's assuming all of the previous columns were same width.
+  /// 
   TrimStart
-  LeftAlignPad(to: Int)
-  RightAlignPad(to: Int)
+  /// Trim only the end of the formatted value, so that the column is Right aligned.
+  /// 
+  /// Of course, that's assuming all of the previous columns were same width.
+  /// 
+  TrimEnd
+  /// Trim both ends of the formatted value, then pad the right to be at least the specified width.
+  /// 
+  /// ## **Important!**
+  /// If the `String` is longer than the specified width, nothing happens;
+  /// None of the contents are deleted.
+  /// 
+  /// If you wish to ensure that a column is fully aligned, you must manually create
+  /// a column formatter that cuts off excess characters - such a feature is not,
+  /// and will not be provided by this library.
+  /// 
+  LeftAlignPad(to: Int, with: String)
+  /// Trim both ends of the formatted value, then pad the left make the cell be
+  /// at least the specified width.
+  /// 
+  /// ## **Important!**
+  /// If the `String` is longer than the specified width, nothing happens;
+  /// None of the contents are deleted.
+  /// 
+  /// If you wish to ensure that a column is fully aligned, you must manually create
+  /// a column formatter that cuts off excess characters - such a feature is not,
+  /// and will not be provided by this library.
+  /// 
+  RightAlignPad(to: Int, with: String)
 }
 
-pub type RowWhitespaceBehaviour {
-  ExactSameForAllColumns(ColumnWhitespaceBehaviour)
-  SpecifiedForStartingColumns(List(ColumnWhitespaceBehaviour))
-  SpecifiedForAllColumns(List(ColumnWhitespaceBehaviour))
+/// Type specifying the whitespace formatting behaviour of the entire row.
+/// 
+pub type WhitespaceBehaviour {
+  WhitespaceBehaviour(
+    default: ColumnWhitespaceBehaviour,
+    specified: List(Option(ColumnWhitespaceBehaviour)),
+  )
 }
 
 // ==== Private Types ====
@@ -141,18 +206,26 @@ type EscapeWhich {
 /// that every possible input to your formatting function can be losslessly parsed with
 /// the corresponding parsing function.
 /// 
-pub fn build(f: fn(a) -> List(String)) -> Formatter(a) {
+pub fn build(format_row: fn(a) -> List(String)) -> Formatter(a) {
   Formatter(
     column_separator: ",",
     row_separator: "\n",
     escaper: "\"",
     metadata_separator: ":",
     escape_all: False,
-    column_data: #(ExactSameForAllColumns(DoNothing), None),
-    formatter: f,
+    headers: None,
+    whitespace: WhitespaceBehaviour(DoNothing, []),
+    formatter: format_row,
   )
 }
 
+/// Start building a `Formatter` column by column.
+/// 
+/// This function creates an empty formatter with an as-of-yet unspecified type, which when
+/// used always returns an empty row. To *actually* create a working `Formatter`,
+/// use the [`format.column`](format.html#column) function to specify how to fill
+/// each subsequent column.
+/// 
 pub fn init() -> Formatter(a) {
   Formatter(
     column_separator: ",",
@@ -160,68 +233,29 @@ pub fn init() -> Formatter(a) {
     escaper: "\"",
     metadata_separator: ":",
     escape_all: False,
-    column_data: #(ExactSameForAllColumns(DoNothing), Some([])),
-    formatter: fn(_value: a) -> List(String) { [] },
+    headers: Some([]),
+    whitespace: WhitespaceBehaviour(DoNothing, []),
+    formatter: fn(_) { [] },
   )
 }
 
 pub fn column(
   formatter: Formatter(a),
   column_name: String,
+  whitespace: Option(ColumnWhitespaceBehaviour),
   format_col: fn(a) -> String,
 ) -> Formatter(a) {
+  let WhitespaceBehaviour(def, cols) = formatter.whitespace
   Formatter(
     ..formatter,
-    column_data: #(
-      formatter.column_data.0,
-      formatter.column_data.1
-        |> option.map(list.append(_, [column_name])),
-    ),
+    headers: formatter.headers |> option.map(list.append(_, [column_name])),
+    whitespace: WhitespaceBehaviour(def, list.append(cols, [whitespace])),
     formatter: fn(value: a) -> List(String) {
       value
       |> formatter.formatter()
       |> list.append([format_col(value)])
     },
   )
-}
-
-pub fn column_whitespace(
-  formatter: Formatter(a),
-  whitespace_behaviour: ColumnWhitespaceBehaviour,
-) -> Formatter(a) {
-  let col_behaviour = fn(existing_col_behaviour, pad_with) {
-    case formatter.column_data.1 {
-      Some(l) ->
-        existing_col_behaviour
-        |> pad_list_end_with(list.length(l) - 1, pad_with)
-        |> list.append([whitespace_behaviour])
-      None ->
-        existing_col_behaviour
-        |> list.append([whitespace_behaviour])
-    }
-  }
-
-  let make_col_behaviour = fn(existing_col_behaviour) {
-    case existing_col_behaviour {
-      [] -> col_behaviour(existing_col_behaviour, DoNothing)
-      [head, ..] -> col_behaviour(existing_col_behaviour, head)
-    }
-  }
-
-  let column_whitespace_behaviour = case formatter.column_data.0 {
-    ExactSameForAllColumns(global) ->
-      // If there is a globally specified column behaviour, use it to pad the list
-      SpecifiedForStartingColumns(make_col_behaviour([global]))
-    SpecifiedForStartingColumns(cols) ->
-      SpecifiedForStartingColumns(make_col_behaviour(cols))
-    SpecifiedForAllColumns(cols) -> {
-      SpecifiedForAllColumns(make_col_behaviour(cols))
-    }
-  }
-  Formatter(..formatter, column_data: #(
-    column_whitespace_behaviour,
-    formatter.column_data.1,
-  ))
 }
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
@@ -257,10 +291,32 @@ pub fn set_headers(
   formatter: Formatter(a),
   new_headers: List(String),
 ) -> Formatter(a) {
-  Formatter(..formatter, column_data: #(
-    formatter.column_data.0,
-    Some(new_headers),
-  ))
+  Formatter(..formatter, headers: Some(new_headers))
+}
+
+/// Function to manually set whitespace behaviour for each column.
+/// 
+/// For more easily understandable control over this, consider using a column-based
+/// `Formatter` builder through [`format.init`](format.html#init) and
+/// [`format.column`](format.html#column).
+/// 
+pub fn set_columns_whitespace(
+  formatter: Formatter(a),
+  columns: List(Option(ColumnWhitespaceBehaviour)),
+) -> Formatter(a) {
+  let WhitespaceBehaviour(default, _) = formatter.whitespace
+  Formatter(..formatter, whitespace: WhitespaceBehaviour(default, columns))
+}
+
+/// Set the default whitespace behaviour that is used when formatting,
+/// and used when a behaviour is not specified for any given column.
+/// 
+pub fn set_default_whitespace(
+  formatter: Formatter(a),
+  default: ColumnWhitespaceBehaviour,
+) -> Formatter(a) {
+  let WhitespaceBehaviour(_, specified) = formatter.whitespace
+  Formatter(..formatter, whitespace: WhitespaceBehaviour(default, specified))
 }
 
 /// Function to set custom escaper (character that wraps the value if its'
@@ -322,14 +378,15 @@ pub fn preprocess(
         |> list.map(make_metadata_formatter(formatter))
         |> string.join("")
         |> wrap(in: "---" <> formatter.row_separator)
-      case formatter.column_data.1 {
+      case formatter.headers {
         Some(headers) -> {
           let row =
             headers
+            |> make_whitespace_processor(formatter)
             |> list.map(make_ensafeify(formatter, Data))
             |> string.join(formatter.column_separator)
           #(
-            Formatter(..formatter, column_data: #(formatter.column_data.0, None)),
+            Formatter(..formatter, headers: None),
             metadata <> row <> formatter.row_separator,
           )
         }
@@ -370,7 +427,8 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
     _escaper,
     _metadata_separator,
     _escape_all,
-    #(_whitespace, maybe_headers),
+    maybe_headers,
+    _whitespace,
     to_string,
   ) = formatter
 
@@ -380,6 +438,7 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   }
   |> list.map(fn(values: List(String)) -> String {
     values
+    |> make_whitespace_processor(formatter)
     |> list.map(make_ensafeify(formatter, Data))
     |> string.join(column_separator)
   })
@@ -403,20 +462,27 @@ pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
 
 // ==== Private Functions ====
 
-/// Internal function that pads a `List(a)` with element `a` until the `List` is of length `c`.
-/// 
-/// If the List is already the specified length or longer, it is returned unchanged.
-/// 
-fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
-  case c {
-    // If the pad target is non-positive, exit the function immediately
-    n if n <= 0 -> l
-    // Else try to pad to the target
-    count ->
-      el
-      |> list.repeat(count - list.length(l))
-      |> list.append(l, _)
+fn process_cell_whitespace(
+  cell: String,
+  behaviour: ColumnWhitespaceBehaviour,
+) -> String {
+  case behaviour {
+    DoNothing -> cell
+    TrimAll -> string.trim(cell)
+    TrimStart -> string.trim_start(cell)
+    TrimEnd -> string.trim_end(cell)
+    LeftAlignPad(length, padding) ->
+      string.trim(cell) |> string.pad_end(to: length, with: padding)
+    RightAlignPad(length, padding) ->
+      string.trim(cell) |> string.pad_start(to: length, with: padding)
   }
+}
+
+fn make_whitespace_processor(
+  formatter: Formatter(a),
+) -> fn(List(String)) -> List(String) {
+  let WhitespaceBehaviour(default, specified) = formatter.whitespace
+  util.map2_default_option(_, specified, default, process_cell_whitespace)
 }
 
 /// Internal helper function for creating a function that checks if a specific element needs
