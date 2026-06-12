@@ -15,6 +15,10 @@
 //// own inverses (ie, that a primitive with two functions inside of it, `fn encode(a) -> String`
 //// and `fn decode(String) -> a` satisfy the condition that `for every possible i,
 //// i = decode(encode(i))`)
+//// 
+//// This feature is abandoned - I don't think it's possible to achieve given the current
+//// structure of this library, and given the type system of Gleam.
+//// 
 
 import gleam/list
 import gleam/result
