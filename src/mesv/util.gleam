@@ -273,3 +273,44 @@ fn map2_default_loop(
       ])
   }
 }
+
+/// A modified `util.map2_default` function specifically for mapping `List(a)` together with
+/// `List(Option(b))`. If the value at an index `i` of `List(b)` corresponding to some `a`
+/// is `None`, or if `List(b)` ran out of values, the default value provided for `b` is used
+/// for the mapping function.
+/// 
+pub fn map2_default_option(
+  first: List(a),
+  second: List(Option(b)),
+  default_b: b,
+  fun: fn(a, b) -> c,
+) -> List(c) {
+  map2_default_option_loop(first, second, default_b, fun, [])
+}
+
+fn map2_default_option_loop(
+  first: List(a),
+  second: List(Option(b)),
+  default_b: b,
+  fun: fn(a, b) -> c,
+  acc: List(c),
+) -> List(c) {
+  case first, second {
+    [], _ -> list.reverse(acc)
+    [head_first, ..rest_first], [] ->
+      map2_default_option_loop(rest_first, [], default_b, fun, [
+        fun(head_first, default_b),
+        ..acc
+      ])
+    [head_first, ..rest_first], [Some(head_second), ..rest_second] ->
+      map2_default_option_loop(rest_first, rest_second, default_b, fun, [
+        fun(head_first, head_second),
+        ..acc
+      ])
+    [head_first, ..rest_first], [None, ..rest_second] ->
+      map2_default_option_loop(rest_first, rest_second, default_b, fun, [
+        fun(head_first, default_b),
+        ..acc
+      ])
+  }
+}
