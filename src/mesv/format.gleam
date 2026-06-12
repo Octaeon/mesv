@@ -419,9 +419,16 @@ pub fn preprocess(
 pub fn then_run(
   in: #(Formatter(a), Stream(String)),
   data: Stream(a),
-) -> #(Formatter(a), Stream(String)) {
+) -> Stream(String) {
   let #(formatter, metadata_stream) = in
-  #(formatter, stream.concat(metadata_stream, run(formatter, data)))
+  stream.concat(metadata_stream, run(formatter, data))
+}
+
+pub fn add_row_sep(
+  stream: Stream(String),
+  separator sep: String,
+) -> Stream(String) {
+  stream |> stream.map(fn(row) { row <> sep })
 }
 
 /// Helper function to use after calling the [`format.then_run`](format.html#then_run),
@@ -429,13 +436,9 @@ pub fn then_run(
 /// 
 /// It takes in the `Formatter` just to know what to put in between rows as the separator.
 /// 
-pub fn then_collect(in: #(Formatter(a), Stream(String))) -> String {
-  collect_row_stream(in.1, in.0.row_separator)
-}
-
-pub fn collect_row_stream(stream: Stream(String), with: String) -> String {
+pub fn then_join(stream: Stream(String), with separator: String) -> String {
   stream
-  |> stream.join(fn(row, previous) { previous <> with <> row })
+  |> stream.join(fn(row, previous) { previous <> separator <> row })
   |> result.unwrap("")
 }
 

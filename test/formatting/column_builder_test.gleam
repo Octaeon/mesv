@@ -14,7 +14,7 @@ pub fn default_normal_test() -> Nil {
     |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.normal_data()))
-    |> format.then_collect()
+    |> format.then_join("\n")
 
   assert formatted
     == "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"
@@ -35,7 +35,7 @@ pub fn default_column_separator_test() -> Nil {
     |> format.then_run(
       stream.from_list(mesv_test.column_separator_data(col_sep)),
     )
-    |> format.then_collect()
+    |> format.then_join("\n")
 
   assert formatted
     == "Name,Age,Comment\nAlex,23,\"This is a pretty good library, don't you think?\""
@@ -55,7 +55,7 @@ pub fn default_row_separator_test() -> Nil {
     |> format.set_row_sep(row_sep)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Name,Age,Comment\nAlex,23,\"It should be able to, right?\"\nBartholemew,24,\"Maybe column separators,\nbut what about row separators?\""
@@ -74,7 +74,7 @@ pub fn default_escaper_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
-    |> format.then_collect()
+    |> format.then_join("\n")
 
   assert formatted
     == "Name,Age,Comment\nBartholemew,24,\"Huh, it worked. Now only escapers remain.\"\nAlex,23,What are escapers?\nBartholemew,24,\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\""
@@ -91,7 +91,7 @@ pub fn rearranged_normal_test() -> Nil {
     |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.normal_data()))
-    |> format.then_collect()
+    |> format.then_join("\n")
 
   assert formatted
     == "Age,Name,Comment\n23,Alex,This is a pretty cool library\n24,Bartholemew,Yeah I agree"
@@ -112,7 +112,7 @@ pub fn rearranged_column_separator_test() -> Nil {
     |> format.then_run(
       stream.from_list(mesv_test.column_separator_data(col_sep)),
     )
-    |> format.then_collect()
+    |> format.then_join("\n")
 
   assert formatted
     == "Age,Name,Comment\n23,Alex,\"This is a pretty good library, don't you think?\""
@@ -132,7 +132,7 @@ pub fn rearranged_row_separator_test() -> Nil {
     |> format.set_row_sep(row_sep)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Age,Name,Comment\n23,Alex,\"It should be able to, right?\"\n24,Bartholemew,\"Maybe column separators,\nbut what about row separators?\""
@@ -151,7 +151,7 @@ pub fn rearranged_escaper_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
-    |> format.then_collect()
+    |> format.then_join("\n")
 
   assert formatted
     == "Age,Name,Comment\n24,Bartholemew,\"Huh, it worked. Now only escapers remain.\"\n23,Alex,What are escapers?\n24,Bartholemew,\"They're what wrap a value if it contains reserved elements. Right now, it's \"\"\""
@@ -174,7 +174,7 @@ pub fn custom_normal_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.normal_data()))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Name|Age|Comment;Alex|23|This is a pretty cool library;Bartholemew|24|Yeah I agree"
@@ -199,7 +199,7 @@ pub fn custom_column_separator_test() -> Nil {
     |> format.then_run(
       stream.from_list(mesv_test.column_separator_data(col_sep)),
     )
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Name|Age|Comment;Alex|23|'This is a pretty good library, don''t you think?';"
@@ -223,7 +223,7 @@ pub fn custom_row_separator_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Name|Age|Comment;Alex|23|It should be able to, right?;Bartholemew|24|'Maybe column separators,;but what about row separators?'"
@@ -246,7 +246,7 @@ pub fn custom_escaper_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Name|Age|Comment;Bartholemew|24|Huh, it worked. Now only escapers remain.;Alex|23|What are escapers?;Bartholemew|24|'They''re what wrap a value if it contains reserved elements. Right now, it''s '''"
@@ -269,7 +269,7 @@ pub fn custom_rearranged_normal_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.normal_data()))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Age|Name|Comment;23|Alex|This is a pretty cool library;24|Bartholemew|Yeah I agree"
@@ -294,7 +294,7 @@ pub fn custom_rearranged_column_separator_test() -> Nil {
     |> format.then_run(
       stream.from_list(mesv_test.column_separator_data(col_sep)),
     )
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Age|Name|Comment;23|Alex|'This is a pretty good library, don''t you think?';"
@@ -318,7 +318,7 @@ pub fn custom_rearranged_row_separator_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Age|Name|Comment;23|Alex|It should be able to, right?;24|Bartholemew|'Maybe column separators,;but what about row separators?'"
@@ -341,7 +341,7 @@ pub fn custom_rearranged_escaper_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Age|Name|Comment;24|Bartholemew|Huh, it worked. Now only escapers remain.;23|Alex|What are escapers?;24|Bartholemew|'They''re what wrap a value if it contains reserved elements. Right now, it''s '''"

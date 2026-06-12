@@ -11,7 +11,7 @@ pub fn default_normal_test() -> Nil {
     |> format.set_headers(["Name", "Age", "Comment"])
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.normal_data()))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"
@@ -27,7 +27,7 @@ pub fn default_whitespace_test() -> Nil {
     |> format.set_headers(["  Name  ", "  Age  ", "  Comment  "])
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.normal_data()))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "  Name  ,  Age  ,  Comment  \nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"
@@ -43,7 +43,7 @@ pub fn default_normal_escaped_test() -> Nil {
     |> format.set_headers(["Name", "\"Age\"", "Comment"])
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.normal_data()))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "Name,\"\"\"Age\"\"\",Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"
@@ -59,7 +59,7 @@ pub fn default_whitespace_escaped_test() -> Nil {
     |> format.set_headers(["  Name  ", "\"  Age  \"", "  Comment  "])
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.normal_data()))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "  Name  ,\"\"\"  Age  \"\"\",  Comment  \nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"
@@ -75,7 +75,7 @@ pub fn default_whitespace_around_escapers_test() -> Nil {
     |> format.set_headers(["  Name  ", "  \"Age\"  ", "  Comment  "])
     |> format.preprocess([])
     |> format.then_run(stream.from_list(mesv_test.normal_data()))
-    |> format.then_collect()
+    |> format.then_join(row_sep)
 
   assert formatted
     == "  Name  ,\"  \"\"Age\"\"  \",  Comment  \nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree"

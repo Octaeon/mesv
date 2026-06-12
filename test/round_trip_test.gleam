@@ -42,13 +42,11 @@ fn build_test_unit(
     |> format.set_headers(headers)
     |> format.preprocess([])
     |> format.then_run(stream.from_list(rows))
-    |> fn(in) {
-      let #(_, stream) = in
+    |> fn(stream) {
       parser
       |> parse.set_expected_headers(InOrderExact(headers))
       |> parse.preprocess(RowStream(stream))
       |> parse.then_run()
-      // |> parse.just_data()
       |> result.map(fn(preprocessing_output) {
         stream.to_list(preprocessing_output.1)
       })

@@ -49,8 +49,7 @@ fn build_test_unit(
     |> format.set_headers(headers)
     |> format.preprocess(metadata)
     |> format.then_run(stream.from_list(rows))
-    |> fn(in) {
-      let #(_, stream) = in
+    |> fn(stream) {
       parser
       |> parse.set_expected_headers(InOrderExact(headers))
       |> parse.preprocess(RowStream(stream))

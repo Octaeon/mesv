@@ -267,10 +267,10 @@ pub fn drop(stream: Stream(a), count: Int) -> Stream(a) {
 /// function, and constructs a new `Stream` by calling itself on the one that was
 /// returned inside of the `Step` type.
 /// 
-pub fn map(stream: Stream(a), func: fn(a) -> b) -> Stream(b) {
+pub fn map(stream: Stream(a), fun: fn(a) -> b) -> Stream(b) {
   Stream(fn() {
     case next(stream) {
-      Next(stream, value) -> Next(map(stream, func), func(value))
+      Next(stream, value) -> Next(map(stream, fun), fun(value))
       Done -> Done
     }
   })
@@ -289,12 +289,12 @@ pub fn map(stream: Stream(a), func: fn(a) -> b) -> Stream(b) {
 pub fn map2(
   first: Stream(a),
   second: Stream(b),
-  func: fn(a, b) -> c,
+  fun: fn(a, b) -> c,
 ) -> Stream(c) {
   Stream(fn() {
     case next(first), next(second) {
       Next(next_first, val_first), Next(next_second, val_second) ->
-        Next(map2(next_first, next_second, func), func(val_first, val_second))
+        Next(map2(next_first, next_second, fun), fun(val_first, val_second))
       _, _ -> Done
     }
   })

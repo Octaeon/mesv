@@ -24,7 +24,7 @@ pub fn default_normal_test() -> Nil {
     |> format.set_default_whitespace(TrimAll)
     |> format.preprocess([])
     |> format.then_run(stream.from_list([#(16, True, "huh?", 0)]))
-    |> format.then_collect()
+    |> format.then_join("\n")
 
   assert formatted
     == "Index---,Boolean,String,\"<Binary> \n\"\n0x10----,true,huh?,b0    "
