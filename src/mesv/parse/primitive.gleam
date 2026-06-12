@@ -25,6 +25,14 @@ pub type ValueError(e) {
   )
 }
 
+/// Create your own custom primitive parser and make it also return a `ValueError`.
+/// 
+/// The function should return either `Ok(a)` where `a` is your desired data type, or
+/// `Error(#(Option(String, b)))`, where `Option(String)` is appended to the `reasons`
+/// field of the `ValueError` record, and `b` is an arbitrary data type that specializes
+/// the `ValueError` type - so, you could just return `Nil`, or create your own,
+/// custom Error type.
+/// 
 pub fn make_primitive(
   name: String,
   func: fn(String) -> Result(a, #(Option(String), b)),
@@ -38,14 +46,20 @@ pub fn make_primitive(
   }
 }
 
+/// Parse a `String` value as a base 10 integer.
+/// 
 pub fn integer(val: String) -> Result(Int, ValueError(_)) {
   integer_arbitrary_base(10)(val)
 }
 
+/// Parse a `String` value as a base 16 hexadecimal integer.
+/// 
 pub fn integer_hex(val: String) -> Result(Int, ValueError(_)) {
   integer_arbitrary_base(16)(val)
 }
 
+/// Parse a `String` value as a base 2 (binary) integer.
+/// 
 pub fn integer_binary(val: String) -> Result(Int, ValueError(_)) {
   integer_arbitrary_base(2)(val)
 }
