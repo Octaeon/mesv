@@ -400,19 +400,21 @@ pub fn preprocess(
   case metadata {
     [] -> #(formatter, "")
     non_empty -> {
+      let #(whitespace, maybe_headers) = formatter.column_data
       let metadata =
         non_empty
         |> list.map(make_metadata_formatter(formatter))
         |> string.join("")
         |> wrap(in: "---" <> formatter.row_separator)
-      case formatter.column_data.1 {
+      case maybe_headers {
         Some(headers) -> {
           let row =
             headers
+            |> make_whitespace_processor(formatter)
             |> list.map(make_ensafeify(formatter, Data))
             |> string.join(formatter.column_separator)
           #(
-            Formatter(..formatter, column_data: #(formatter.column_data.0, None)),
+            Formatter(..formatter, column_data: #(whitespace, None)),
             metadata <> row <> formatter.row_separator,
           )
         }
@@ -463,6 +465,7 @@ pub fn run(formatter: Formatter(a), elements: List(a)) -> String {
   }
   |> list.map(fn(values: List(String)) -> String {
     values
+    |> make_whitespace_processor(formatter)
     |> list.map(make_ensafeify(formatter, Data))
     |> string.join(column_separator)
   })
@@ -499,6 +502,37 @@ fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
       el
       |> list.repeat(count - list.length(l))
       |> list.append(l, _)
+  }
+}
+
+fn process_cell_whitespace(
+  cell: String,
+  behaviour: ColumnWhitespaceBehaviour,
+) -> String {
+  case behaviour {
+    DoNothing -> cell
+    TrimAll -> string.trim(cell)
+    TrimStart -> string.trim_start(cell)
+    LeftAlignPad(length) ->
+      string.trim(cell) |> string.pad_end(to: length, with: " ")
+    RightAlignPad(length) ->
+      string.trim(cell) |> string.pad_start(to: length, with: " ")
+  }
+}
+
+fn make_whitespace_processor(
+  formatter: Formatter(a),
+) -> fn(List(String)) -> List(String) {
+  let whitespace = formatter.column_data.0
+  fn(cells: List(String)) -> List(String) {
+    case whitespace {
+      ExactSameForAllColumns(col_behaviour) ->
+        cells
+        |> list.map(process_cell_whitespace(_, col_behaviour))
+      SpecifiedForStartingColumns(behaviours) ->
+        cells
+        |> util.map2_default(behaviours, DoNothing, process_cell_whitespace)
+    }
   }
 }
 
