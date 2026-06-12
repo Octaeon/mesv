@@ -400,14 +400,16 @@ pub fn preprocess(
         |> wrap(in: "---" <> formatter.row_separator)
       case formatter.headers {
         Some(headers) -> {
-          let row =
-            headers
-            |> make_whitespace_processor(formatter)
-            |> list.map(make_ensafeify(formatter, Data))
-            |> string.join(formatter.column_separator)
           #(
             Formatter(..formatter, headers: None),
-            metadata <> row <> formatter.row_separator,
+            metadata
+              <> {
+              headers
+              |> make_whitespace_processor(formatter)
+              |> list.map(make_ensafeify(formatter, Data))
+              |> string.join(formatter.column_separator)
+            }
+              <> formatter.row_separator,
           )
         }
         None -> #(formatter, metadata)
