@@ -238,3 +238,38 @@ pub fn list_to_string(l: List(a), to_str: fn(a) -> String) -> String {
       |> fn(s) { "[ " <> s <> " ]" }
   }
 }
+
+/// A modified `list.map2` function that also accepts a default value for `List(b)`,
+/// and if the length of `List(b)` is less than that of `List(a)`, the default value
+/// provided for `b` is used for the mapping function.
+/// 
+pub fn map2_default(
+  first: List(a),
+  second: List(b),
+  default_b: b,
+  fun: fn(a, b) -> c,
+) -> List(c) {
+  map2_default_loop(first, second, default_b, fun, [])
+}
+
+fn map2_default_loop(
+  first: List(a),
+  second: List(b),
+  default_b: b,
+  fun: fn(a, b) -> c,
+  acc: List(c),
+) -> List(c) {
+  case first, second {
+    [], _ -> list.reverse(acc)
+    [head_first, ..rest_first], [] ->
+      map2_default_loop(rest_first, [], default_b, fun, [
+        fun(head_first, default_b),
+        ..acc
+      ])
+    [head_first, ..rest_first], [head_second, ..rest_second] ->
+      map2_default_loop(rest_first, rest_second, default_b, fun, [
+        fun(head_first, head_second),
+        ..acc
+      ])
+  }
+}
