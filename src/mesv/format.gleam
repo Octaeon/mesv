@@ -403,7 +403,7 @@ pub fn preprocess(
         Some(headers) -> {
           let stream =
             metadata_stream
-            |> stream.prepend(make_row_processor(formatter)(headers))
+            |> stream.append(make_row_processor(formatter)(headers))
           #(Formatter(..formatter, headers: None), stream)
         }
         None -> #(formatter, metadata_stream)

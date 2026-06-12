@@ -9,7 +9,6 @@
 //// 
 
 import gleam/list
-import gleam/result
 import mesv/format.{type Formatter}
 import mesv/parse.{
   type DataRowError, type Parser, type PreprocessingError, InOrderExact,
@@ -55,11 +54,8 @@ fn build_test_unit(
       parser
       |> parse.set_expected_headers(InOrderExact(headers))
       |> parse.preprocess(RowStream(stream))
-      // |> result.map_error(fn(_) { RanOutOfValues })
-      |> result.map(fn(preprocess_out) {
-        let #(parsed_metadata, parser, csv_source) = preprocess_out
-        #(parsed_metadata, parse.run(parser, csv_source))
-      })
+      |> parse.then()
+      |> parse.then_collect()
     }
   }
 }

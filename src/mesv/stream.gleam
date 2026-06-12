@@ -347,7 +347,7 @@ pub fn filter(stream: Stream(a), predicate: fn(a) -> Bool) -> Stream(a) {
 /// 
 pub fn filter_map(
   stream: Stream(a),
-  predicate: fn(a) -> Result(b, Nil),
+  predicate: fn(a) -> Result(b, e),
 ) -> Stream(b) {
   Stream(fn() {
     case next(stream) {

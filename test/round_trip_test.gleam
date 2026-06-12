@@ -47,9 +47,10 @@ fn build_test_unit(
       parser
       |> parse.set_expected_headers(InOrderExact(headers))
       |> parse.preprocess(RowStream(stream))
+      |> parse.then()
+      // |> parse.just_data()
       |> result.map(fn(preprocessing_output) {
-        let #(_metadata, parser, csv_source) = preprocessing_output
-        parse.run(parser, csv_source)
+        stream.to_list(preprocessing_output.1)
       })
     }
   }
