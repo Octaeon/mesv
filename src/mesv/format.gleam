@@ -134,7 +134,7 @@ pub type ColumnWhitespaceBehaviour {
   /// a column formatter that cuts off excess characters - such a feature is not,
   /// and will not be provided by this library.
   /// 
-  LeftAlignPad(to: Int)
+  LeftAlignPad(to: Int, with: String)
   /// Trim both ends of the formatted value, then pad the left make the cell be
   /// at least the specified width.
   /// 
@@ -146,7 +146,7 @@ pub type ColumnWhitespaceBehaviour {
   /// a column formatter that cuts off excess characters - such a feature is not,
   /// and will not be provided by this library.
   /// 
-  RightAlignPad(to: Int)
+  RightAlignPad(to: Int, with: String)
 }
 
 /// Type specifying the whitespace formatting behaviour of the entire row.
