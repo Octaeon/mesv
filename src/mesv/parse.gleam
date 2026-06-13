@@ -368,19 +368,14 @@ pub fn column(
   })
 }
 
-pub type ExpectLabel {
-  Exact(String)
-  Passes(fn(String) -> Bool)
-}
-
 pub fn labelled_column(
   parser: Parser(fn(a) -> b, e),
-  name: ExpectLabel,
+  name: Predicate(String),
   parse: fn(String) -> Result(a, e),
 ) -> Parser(b, e) {
-  let make_permutation: fn(List(#(Int, String))) ->
-    Result(#(List(#(Int, String)), Permutation(String)), PreprocessingError) = fn(
-    found_headers: List(#(Int, String)),
+  let make_permutation = fn(found_headers: List(#(Int, String))) -> Result(
+    #(List(#(Int, String)), Permutation(String)),
+    PreprocessingError,
   ) {
     use #(remaining_headers, permutation) <- result.try(
       option.unwrap(parser.make_permutation, fn(h) {
@@ -389,10 +384,7 @@ pub fn labelled_column(
     )
 
     remaining_headers
-    |> util.pop_first(case name {
-      Exact(str) -> fn(el: #(Int, String)) { el.1 == str }
-      Passes(fun) -> fn(el: #(Int, String)) { fun(el.1) }
-    })
+    |> util.pop_first(fn(el: #(Int, String)) { util.check(name, el.1) })
     |> result.map_error(fn(_) { FailedHeaderParsing(NotEnoughCells) })
     |> result.try(fn(in) {
       let #(#(index, _), passed_headers) = in
@@ -402,31 +394,28 @@ pub fn labelled_column(
       |> result.map_error(fn(_) { FailedHeaderParsing(NotEnoughCells) })
     })
   }
-  Parser(
-    ..parser,
-    make_permutation: Some(make_permutation),
-    parse: fn(tokens: List(String)) -> Result(
-      #(b, List(String)),
-      DataRowError(e),
-    ) {
-      use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
+  let parse = fn(tokens: List(String)) -> Result(
+    #(b, List(String)),
+    DataRowError(e),
+  ) {
+    use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
 
-      // This case ends up being run when the parser is running.
-      // So, if the list ends up empty, that means that one row has too few elements
-      // to build the expected data type.
-      case remaining_tokens {
-        [cell, ..rest] ->
-          // TODO: Should I process the elements here, or no? I'm not sure
-          cell
-          |> parse()
-          |> result.map_error(fn(e) { CellParsingFailed(cell, e) })
-          |> result.map(constructor)
-          |> result.map(fn(b) { #(b, rest) })
+    // This case ends up being run when the parser is running.
+    // So, if the list ends up empty, that means that one row has too few elements
+    // to build the expected data type.
+    case remaining_tokens {
+      [cell, ..rest] ->
+        // TODO: Should I process the elements here, or no? I'm not sure
+        cell
+        |> parse()
+        |> result.map_error(fn(e) { CellParsingFailed(cell, e) })
+        |> result.map(constructor)
+        |> result.map(fn(b) { #(b, rest) })
 
-        [] -> Error(NotEnoughCells)
-      }
-    },
-  )
+      [] -> Error(NotEnoughCells)
+    }
+  }
+  Parser(..parser, make_permutation: Some(make_permutation), parse: parse)
 }
 
 /// Simply skip the next `count` columns without reading their contents.
@@ -1126,8 +1115,6 @@ fn make_header_processor(
       |> result.map_error(fn(ord) {
         case ord {
           order.Lt -> FailedHeaderParsing(TooManyCells(headers))
-          // Should never occur, since `require_length` only returns
-          // `Gt` and `Lt` as `Error`s.
           order.Eq -> panic
           order.Gt -> FailedHeaderParsing(NotEnoughCells)
         }
@@ -1147,8 +1134,6 @@ fn make_header_processor(
             util.check(predicate, header)
           })
         case list.all(matching, function.identity) {
-          // Ok(#(index, _)) -> Error(HeadersMismatch(processed, []))
-          // Error(_) -> Ok(to_action(expected))
           True -> Ok(to_action(expected))
           False ->
             Error(HeadersMismatch(
