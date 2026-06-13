@@ -94,7 +94,7 @@ pub fn default_skip_empty_row_strict_columns_test() -> Nil {
 
   assert parsed == Ok(mesv_test.expected_normal_data()) as
     // When Ignoring a row, no need to check if there are enough columns or anything
-    "Parsing default parameters | Headers, Ignore empty header row even if there aren't enough cells in strict"
+    "Parsing default parameters | Headers, Ignore empty header row"
 }
 
 pub fn default_skip_malformed_test() -> Nil {
@@ -158,15 +158,7 @@ pub fn default_ordered_exact_fail_test() -> Nil {
     == Error(
       HeadersMismatch(["Name", "Age", "comment"], [Ok(0), Ok(1), Error(Nil)]),
     )
-    as
-    // Error(
-    //   ExpectedHeadersMismatch(InOrderExact(["Name", "Age", "Comment"]), [
-    //     "Name",
-    //     "Age",
-    //     "comment",
-    //   ]),
-    // )
-    "Parsing default parameters | Headers, InOrderExact fail"
+    as "Parsing default parameters | Headers, InOrderExact fail"
 }
 
 pub fn default_ordered_match_pass_test() -> Nil {

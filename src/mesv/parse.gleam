@@ -1120,8 +1120,9 @@ fn make_header_processor(
       List(Predicate(String)),
       PreprocessingError,
     ) {
-      check
-      |> require_length(headers, parser.strict_columns)
+      headers
+      |> list.filter(fn(s) { !string.is_empty(s) })
+      |> require_length(check, parser.strict_columns)
       |> result.map_error(fn(ord) {
         case ord {
           order.Lt -> FailedHeaderParsing(TooManyCells(headers))
@@ -1139,8 +1140,7 @@ fn make_header_processor(
       HeaderAction,
       PreprocessingError,
     ) {
-      res
-      |> result.try(fn(predicates) {
+      result.try(res, fn(predicates) {
         let matching =
           predicates
           |> list.map2(processed, fn(predicate, header) {
@@ -1379,13 +1379,13 @@ fn data_row_to_metadata_row(err: DataRowError(e)) -> MetadataRowError {
 fn require_length(
   req: List(g),
   exact: Bool,
-) -> fn(List(h)) -> Result(List(h), Order) {
+) -> fn(List(h)) -> Result(List(g), Order) {
   let required = list.length(req)
   fn(check: List(h)) {
     case int.compare(required, list.length(check)) {
       order.Lt if exact -> Error(order.Lt)
-      order.Lt -> Ok(check)
-      order.Eq -> Ok(check)
+      order.Lt -> Ok(req)
+      order.Eq -> Ok(req)
       order.Gt -> Error(order.Gt)
     }
   }
