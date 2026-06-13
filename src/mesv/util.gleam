@@ -330,3 +330,73 @@ pub fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
       |> list.append(l, _)
   }
 }
+
+pub fn pop_first(
+  in l: List(a),
+  that_matches predicate: fn(a) -> Bool,
+) -> Result(#(a, List(a)), Nil) {
+  pop_first_loop(l, predicate, [])
+}
+
+fn pop_first_loop(
+  l: List(a),
+  fun: fn(a) -> Bool,
+  acc: List(a),
+) -> Result(#(a, List(a)), Nil) {
+  case l {
+    [] -> Error(Nil)
+    [head, ..rest] ->
+      case fun(head) {
+        True -> Ok(#(head, list.append(list.reverse(acc), rest)))
+        False -> pop_first_loop(rest, fun, [head, ..acc])
+      }
+  }
+}
+
+pub type Permutation(a) {
+  Permutation(max_index: Int, output: List(Int))
+}
+
+pub fn blank(length: Int) -> Permutation(a) {
+  Permutation(max_index: length, output: [])
+}
+
+pub fn append_index(
+  perm: Permutation(a),
+  i: Int,
+) -> Result(Permutation(a), Nil) {
+  case i {
+    _ if i > perm.max_index || i < 0 -> Error(Nil)
+    allowed -> Ok(Permutation(..perm, output: [allowed, ..perm.output]))
+  }
+}
+
+pub fn execute(perm: Permutation(a), on l: List(a)) -> Result(List(a), Nil) {
+  case list.length(l) >= perm.max_index {
+    True -> exec_loop(l, perm.output, [])
+    False -> Error(Nil)
+  }
+}
+
+fn exec_loop(
+  over: List(a),
+  indexes: List(Int),
+  acc: List(a),
+) -> Result(List(a), Nil) {
+  case indexes {
+    [] -> Ok(acc)
+    [index, ..rest] ->
+      case list_index(over, index) {
+        Ok(el) -> exec_loop(over, rest, [el, ..acc])
+        Error(Nil) -> Error(Nil)
+      }
+  }
+}
+
+pub fn list_index(in: List(a), at: Int) -> Result(a, Nil) {
+  case at, in {
+    0, [head, ..] -> Ok(head)
+    _, [] -> Error(Nil)
+    remaining, [_, ..rest] -> list_index(rest, remaining - 1)
+  }
+}
