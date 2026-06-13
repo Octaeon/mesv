@@ -399,6 +399,33 @@ fn exec_loop(
   }
 }
 
+pub fn execute_default(
+  perm: Permutation(a),
+  on l: List(a),
+  with default: a,
+) -> List(a) {
+  exec_default_loop(l, perm.output, default, [])
+}
+
+fn exec_default_loop(
+  over: List(a),
+  indexes: List(Int),
+  default: a,
+  acc: List(a),
+) -> List(a) {
+  case indexes {
+    [] -> acc
+    [index, ..rest] ->
+      exec_default_loop(over, rest, default, [
+        case list_index(over, index) {
+          Ok(el) -> el
+          Error(Nil) -> default
+        },
+        ..acc
+      ])
+  }
+}
+
 pub fn list_index(in: List(a), at: Int) -> Result(a, Nil) {
   case at, in {
     0, [head, ..] -> Ok(head)

@@ -206,14 +206,13 @@ pub type DataRowError(a) {
 /// 
 /// Use the provided building functions to modify it instead.
 /// 
-pub type Parser(a, b) {
+pub opaque type Parser(a, b) {
   Parser(
     column_separator: String,
     row_separator: String,
     escaper: String,
     metadata_separator: String,
-    // Change the `ExpectedHeaders` type from purely a data type signifying what is expected
-    // to one that keeps track of in which order columns go into the `parse` function.
+    mode: ParserMode,
     expect_headers: ExpectedHeaders,
     make_permutation: Option(
       fn(List(#(Int, String))) ->
@@ -244,27 +243,19 @@ pub type ExpectedHeaders {
   /// Treat the first row as data (so no headers are expected).
   /// 
   Empty
-  /// Expect the first row of headers to be **exactly** in this order, with **exactly**
-  /// these elements.
-  /// 
-  /// If you set `strict_columns` for the `Parser`, the headers must also be exactly this length.
-  /// 
-  InOrderExact(List(String))
   /// Expect the first row of headers to return `True` when tested with the provided functions,
   /// in **exact** order.
   /// 
-  InOrderMustPass(List(Predicate(String)))
+  VerifyOrdered(List(Predicate(String)))
 }
 
 // ==== Private Types ====
 
-/// This is a bad solution to what I'm doing. It will be changed (or made privete)
-/// 
-/// Oh look, it's private now.
-/// 
-type HeaderAction {
-  ParseFirstRow
-  SkipFirstRow
+type ParserMode {
+  Unset
+  InOrder
+  OrderedVerify
+  ColumnBased
 }
 
 // ==== Public API ====
@@ -312,6 +303,7 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b, e) {
     row_separator: "\n",
     metadata_separator: ":",
     escaper: "\"",
+    mode: Unset,
     expect_headers: Empty,
     make_permutation: None,
     parse: fn(tokens: List(String)) -> Result(
@@ -345,7 +337,8 @@ pub fn column(
   parser: Parser(fn(a) -> b, e),
   parse: fn(String) -> Result(a, e),
 ) -> Parser(b, e) {
-  Parser(..parser, parse: fn(tokens: List(String)) -> Result(
+  assert parser.mode == Unset || parser.mode == InOrder
+  Parser(..parser, mode: InOrder, parse: fn(tokens: List(String)) -> Result(
     #(b, List(String)),
     DataRowError(e),
   ) {
@@ -373,6 +366,7 @@ pub fn labelled_column(
   name: Predicate(String),
   parse: fn(String) -> Result(a, e),
 ) -> Parser(b, e) {
+  assert parser.mode == Unset || parser.mode == ColumnBased
   let make_permutation = fn(found_headers: List(#(Int, String))) -> Result(
     #(List(#(Int, String)), Permutation(String)),
     PreprocessingError,
@@ -382,7 +376,6 @@ pub fn labelled_column(
         Ok(#(h, util.blank(list.length(h))))
       })(found_headers),
     )
-
     remaining_headers
     |> util.pop_first(fn(el: #(Int, String)) { util.check(name, el.1) })
     |> result.map_error(fn(_) { FailedHeaderParsing(NotEnoughCells) })
@@ -394,6 +387,7 @@ pub fn labelled_column(
       |> result.map_error(fn(_) { FailedHeaderParsing(NotEnoughCells) })
     })
   }
+
   let parse = fn(tokens: List(String)) -> Result(
     #(b, List(String)),
     DataRowError(e),
@@ -415,7 +409,13 @@ pub fn labelled_column(
       [] -> Error(NotEnoughCells)
     }
   }
-  Parser(..parser, make_permutation: Some(make_permutation), parse: parse)
+
+  Parser(
+    ..parser,
+    mode: ColumnBased,
+    make_permutation: Some(make_permutation),
+    parse: parse,
+  )
 }
 
 /// Simply skip the next `count` columns without reading their contents.
@@ -467,7 +467,10 @@ pub fn set_expected_headers(
   parser: Parser(a, e),
   headers: ExpectedHeaders,
 ) -> Parser(a, e) {
-  Parser(..parser, expect_headers: headers)
+  assert parser.mode == Unset
+    || parser.mode == InOrder
+    || parser.mode == OrderedVerify
+  Parser(..parser, mode: OrderedVerify, expect_headers: headers)
 }
 
 /// Helper function for converting exact `ExpectedHeaders` into broader comparisons, by first
@@ -511,14 +514,8 @@ pub fn transform_headers(
   case headers {
     Ignore -> Ignore
     Empty -> Empty
-    InOrderExact(headers) ->
-      InOrderMustPass(
-        headers
-        |> list.map(util.equivalent)
-        |> list.map(util.transform(_, fun)),
-      )
-    InOrderMustPass(predicates) ->
-      InOrderMustPass(
+    VerifyOrdered(predicates) ->
+      VerifyOrdered(
         predicates
         |> list.map(util.transform(_, fun)),
       )
@@ -553,7 +550,14 @@ pub fn expect_headers(
   parser: Parser(a, e),
   headers: List(String),
 ) -> Parser(a, e) {
-  Parser(..parser, expect_headers: InOrderExact(headers))
+  assert parser.mode == Unset
+    || parser.mode == InOrder
+    || parser.mode == OrderedVerify
+  Parser(
+    ..parser,
+    mode: OrderedVerify,
+    expect_headers: VerifyOrdered(list.map(headers, util.equivalent)),
+  )
 }
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
@@ -794,25 +798,16 @@ pub fn preprocess(
     |> make_metadata_reader(parser),
   )
   let split_columns = make_column_splitter(parser)
-  let process_headers = make_header_processor(parser)
 
   let row_stream =
     row_stream
     |> stream.map(split_columns)
 
-  case stream.next(row_stream) {
-    Next(stream, value) -> {
-      result.try(process_headers(parser.expect_headers, value), fn(act) {
-        Ok(
-          #(metadata, parser |> set_expected_headers(Empty), case act {
-            ParseFirstRow -> stream |> stream.prepend(value)
-            SkipFirstRow -> stream
-          }),
-        )
-      })
-    }
-    Done -> Error(SourceEmpty)
-  }
+  process_headers(parser, row_stream)
+  |> result.map(fn(out) {
+    let #(parser, stream) = out
+    #(metadata, parser, stream)
+  })
 }
 
 /// Utility function to make calling the parser cleaner.
@@ -1069,8 +1064,8 @@ fn drop(from: List(c), count: Int) -> Result(List(c), Nil) {
 /// 
 fn make_header_processor(
   parser: Parser(a, e),
-) -> fn(ExpectedHeaders, List(String)) ->
-  Result(HeaderAction, PreprocessingError) {
+) -> fn(List(Predicate(String)), List(String)) ->
+  Result(Nil, PreprocessingError) {
   let unescape = fn(cell) {
     cell
     |> make_unescaper(parser)
@@ -1084,24 +1079,6 @@ fn make_header_processor(
         DataNonDuplicatedEscapers(field) -> DataNonDuplicatedEscapers(field)
       })
     })
-  }
-
-  let to_predicates = fn(h: ExpectedHeaders) {
-    case h {
-      Ignore -> []
-      Empty -> []
-      InOrderExact(strs) -> list.map(strs, util.equivalent)
-      InOrderMustPass(preds) -> preds
-    }
-  }
-
-  let to_action = fn(h: ExpectedHeaders) {
-    case h {
-      Ignore -> SkipFirstRow
-      Empty -> ParseFirstRow
-      InOrderExact(_) -> SkipFirstRow
-      InOrderMustPass(_) -> SkipFirstRow
-    }
   }
 
   let make_length_guard = fn(headers) {
@@ -1122,9 +1099,9 @@ fn make_header_processor(
     }
   }
 
-  let make_validator = fn(expected: ExpectedHeaders, processed: List(String)) {
+  let make_validator = fn(processed: List(String)) {
     fn(res: Result(List(Predicate(String)), PreprocessingError)) -> Result(
-      HeaderAction,
+      Nil,
       PreprocessingError,
     ) {
       result.try(res, fn(predicates) {
@@ -1134,7 +1111,7 @@ fn make_header_processor(
             util.check(predicate, header)
           })
         case list.all(matching, function.identity) {
-          True -> Ok(to_action(expected))
+          True -> Ok(Nil)
           False ->
             Error(HeadersMismatch(
               processed,
@@ -1150,8 +1127,8 @@ fn make_header_processor(
     }
   }
 
-  fn(expected: ExpectedHeaders, found: List(String)) -> Result(
-    HeaderAction,
+  fn(expected: List(Predicate(String)), found: List(String)) -> Result(
+    Nil,
     PreprocessingError,
   ) {
     use processed_headers <- result.try(
@@ -1161,9 +1138,8 @@ fn make_header_processor(
     )
 
     expected
-    |> to_predicates()
     |> make_length_guard(processed_headers)
-    |> make_validator(expected, processed_headers)
+    |> make_validator(processed_headers)
   }
 }
 
@@ -1373,5 +1349,53 @@ fn require_length(
       order.Eq -> Ok(req)
       order.Gt -> Error(order.Gt)
     }
+  }
+}
+
+fn process_headers(
+  parser: Parser(a, e),
+  stream: Stream(List(String)),
+) -> Result(#(Parser(a, e), Stream(List(String))), PreprocessingError) {
+  let process_headers = make_header_processor(parser)
+
+  let new_parser = parser |> set_expected_headers(Empty)
+  case stream.next(stream) {
+    Next(rest, header_row) ->
+      case parser.mode, parser.expect_headers {
+        Unset, _ -> {
+          echo "Parser mode unset when processing headers"
+          Error(SourceEmpty)
+        }
+        InOrder, VerifyOrdered(_) -> {
+          echo "Wrong parser mode set for verifying"
+          Error(SourceEmpty)
+        }
+        InOrder, expected | OrderedVerify, expected ->
+          case expected {
+            Ignore -> Ok(#(new_parser, rest))
+            Empty -> Ok(#(new_parser, rest |> stream.prepend(header_row)))
+            VerifyOrdered(predicates) ->
+              predicates
+              |> process_headers(header_row)
+              |> result.map(fn(_) { #(new_parser, rest) })
+          }
+        ColumnBased, _ ->
+          case parser.make_permutation {
+            Some(make_perm) ->
+              header_row
+              |> list.index_map(fn(h, i) { #(i, h) })
+              |> make_perm()
+              |> result.map(fn(out) { out.1 })
+              |> result.map(fn(permutation) {
+                #(
+                  new_parser,
+                  rest |> stream.map(util.execute_default(permutation, _, "")),
+                )
+              })
+
+            None -> Error(SourceEmpty)
+          }
+      }
+    Done -> Error(SourceEmpty)
   }
 }

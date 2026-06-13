@@ -9,10 +9,11 @@ import gleam/list
 import gleam/result
 import mesv/format.{type Formatter}
 import mesv/parse.{
-  type DataRowError, type Parser, type PreprocessingError, InOrderExact,
-  RowStream,
+  type DataRowError, type Parser, type PreprocessingError, RowStream,
+  VerifyOrdered,
 }
 import mesv/stream
+import mesv/util
 import mesv_test.{type RowData}
 
 fn build_test_unit_parser_and_formatter(
@@ -44,7 +45,9 @@ fn build_test_unit(
     |> format.then_run(stream.from_list(rows))
     |> fn(stream) {
       parser
-      |> parse.set_expected_headers(InOrderExact(headers))
+      |> parse.set_expected_headers(
+        VerifyOrdered(list.map(headers, util.equivalent)),
+      )
       |> parse.preprocess(RowStream(stream))
       |> parse.then_run()
       |> result.map(fn(preprocessing_output) {

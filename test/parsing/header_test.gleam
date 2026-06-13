@@ -1,7 +1,8 @@
+import gleam/list
 import gleam/string
 import mesv/parse.{
-  DataUnescapedEscapers, FailedHeaderParsing, HeadersMismatch, Ignore,
-  InOrderExact, InOrderMustPass, Text,
+  DataUnescapedEscapers, FailedHeaderParsing, HeadersMismatch, Ignore, Text,
+  VerifyOrdered,
 }
 import mesv/util
 import mesv_test
@@ -130,7 +131,9 @@ pub fn default_ordered_exact_pass_test() -> Nil {
   let esc = "\""
   let parsed =
     mesv_test.row_data_parser(col_sep, row_sep, esc)
-    |> parse.set_expected_headers(InOrderExact(["Name", "Age", "Comment"]))
+    |> parse.set_expected_headers(VerifyOrdered(
+      ["Name", "Age", "Comment"] |> list.map(util.equivalent),
+    ))
     |> parse.preprocess(Text(
       "Name,Age,Comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
@@ -147,7 +150,9 @@ pub fn default_ordered_exact_fail_test() -> Nil {
   let esc = "\""
   let parsed =
     mesv_test.row_data_parser(col_sep, row_sep, esc)
-    |> parse.set_expected_headers(InOrderExact(["Name", "Age", "Comment"]))
+    |> parse.set_expected_headers(VerifyOrdered(
+      ["Name", "Age", "Comment"] |> list.map(util.equivalent),
+    ))
     |> parse.preprocess(Text(
       "Name,Age,comment\nAlex,23,This is a pretty cool library\nBartholemew,24,Yeah I agree",
     ))
@@ -168,7 +173,7 @@ pub fn default_ordered_match_pass_test() -> Nil {
   let parsed =
     mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.set_expected_headers(
-      InOrderMustPass([
+      VerifyOrdered([
         util.new("Name", string.lowercase, fn(first, second) { first == second }),
         util.new("Age", string.lowercase, fn(first, second) { first == second }),
         util.new("Comment", string.lowercase, fn(first, second) {
@@ -193,7 +198,7 @@ pub fn default_ordered_match_fail_test() -> Nil {
   let parsed =
     mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.set_expected_headers(
-      InOrderMustPass([
+      VerifyOrdered([
         util.new("Name", string.lowercase, fn(first, second) { first == second }),
         util.new("Age", string.lowercase, fn(first, second) { first == second }),
         util.new("Comment", string.lowercase, fn(first, second) {
@@ -223,7 +228,7 @@ pub fn default_header_expectation_transform_lowercase_test() -> Nil {
   let parsed =
     mesv_test.row_data_parser(col_sep, row_sep, esc)
     |> parse.set_expected_headers(
-      InOrderExact(["Name", "Age", "Comment"])
+      VerifyOrdered(["Name", "Age", "Comment"] |> list.map(util.equivalent))
       |> parse.transform_headers(string.lowercase),
     )
     |> parse.preprocess(Text(
