@@ -18,6 +18,12 @@ import gleam/pair
 import gleam/result
 import gleam/string
 
+// ==== Types ====
+
+pub opaque type Predicate(a) {
+  Predicate(internal: a, transform: fn(a) -> a, compare: fn(a, a) -> Bool)
+}
+
 /// Internal helper function that traverses a list, calling the provided `merge` function on
 /// all consecutive elements.
 /// 
@@ -192,7 +198,7 @@ fn take_until_unescaped_loop(
   from: String,
   separator: String,
   esc: String,
-  acc: option.Option(String),
+  acc: Option(String),
 ) -> Result(#(String, String), Nil) {
   case string.split_once(from, on: separator) {
     Ok(#(head, rest)) -> {
@@ -399,4 +405,26 @@ pub fn list_index(in: List(a), at: Int) -> Result(a, Nil) {
     _, [] -> Error(Nil)
     remaining, [_, ..rest] -> list_index(rest, remaining - 1)
   }
+}
+
+pub fn new(
+  internal: a,
+  transform: fn(a) -> a,
+  compare: fn(a, a) -> Bool,
+) -> Predicate(a) {
+  Predicate(internal:, transform:, compare:)
+}
+
+pub fn equivalent(to val: a) -> Predicate(a) {
+  new(val, fn(v) { v }, fn(first, second) { first == second })
+}
+
+pub fn transform(pred: Predicate(a), fun: fn(a) -> a) -> Predicate(a) {
+  let Predicate(internal, transform, compare) = pred
+  Predicate(internal, fn(v) { v |> transform() |> fun() }, compare)
+}
+
+pub fn check(pred: Predicate(a), on: a) -> Bool {
+  let Predicate(internal, transform, compare) = pred
+  compare(transform(internal), transform(on))
 }
