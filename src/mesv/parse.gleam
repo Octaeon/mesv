@@ -95,11 +95,12 @@
 
 import gleam/function
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
 import mesv/stream.{type Stream, Done, Next}
-import mesv/util
+import mesv/util.{type Permutation}
 
 // ==== Public Types ====
 
@@ -212,6 +213,10 @@ pub type Parser(a, b) {
     // Change the `ExpectedHeaders` type from purely a data type signifying what is expected
     // to one that keeps track of in which order columns go into the `parse` function.
     expect_headers: ExpectedHeaders,
+    make_permutation: Option(
+      fn(List(#(Int, String))) ->
+        Result(#(List(#(Int, String)), Permutation(String)), PreprocessingError),
+    ),
     parse: fn(List(String)) -> Result(#(a, List(String)), DataRowError(b)),
     strict_columns: Bool,
     trim_whitespace: #(Bool, Bool),
@@ -321,6 +326,7 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b, e) {
     metadata_separator: ":",
     escaper: "\"",
     expect_headers: Empty,
+    make_permutation: None,
     parse: fn(tokens: List(String)) -> Result(
       #(fn(a) -> b, List(String)),
       DataRowError(e),
@@ -331,41 +337,6 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b, e) {
     trim_whitespace: #(True, True),
   )
 }
-
-// fn describe_error(err: ParsingError) -> String {
-//   case err {
-//     CantParseRow(index, contents, reason) ->
-//       "Can't parse row #"
-//       <> int.to_string(index)
-//       <> " due to [ "
-//       <> reason
-//       <> " ]\n"
-//       <> "contents: [ "
-//       <> contents
-//       <> " ]"
-//     ExpectedHeadersMismatch(expected, found) ->
-//       "Expected "
-//       <> describe_expected_headers(expected)
-//       <> ", found [ "
-//       <> string.join(found, ", ")
-//       <> " ]"
-//     RanOutOfValues -> "Ran out of values"
-//     StrictParsedWithLeftovers(leftovers) ->
-//       "Encountered leftovers: [ " <> string.join(leftovers, ", ") <> " ]"
-//     MalformedCell(element, description) ->
-//       "Malformed cell: [ " <> element <> " ], because " <> description
-//   }
-// }
-// fn describe_expected_headers(headers: ExpectedHeaders) -> String {
-//   case headers {
-//     Skip -> "Skip"
-//     Empty -> "no headers"
-//     InOrderExact(l) -> "Exactly [ " <> string.join(l, ", ") <> " ]"
-//     HeadersMustContain(l) -> "Containing [ " <> string.join(l, ", ") <> " ]"
-//     InOrderMustPass(_) -> "Ordered functions"
-//     HeadersMustContainPassing(_) -> "Unordered functions"
-//   }
-// }
 
 /// Transform a `Parser`, by passing in a parsing function for a specified column.
 /// 
@@ -408,6 +379,67 @@ pub fn column(
       [] -> Error(NotEnoughCells)
     }
   })
+}
+
+pub type ExpectLabel {
+  Exact(String)
+  Passes(fn(String) -> Bool)
+}
+
+pub fn labelled_column(
+  parser: Parser(fn(a) -> b, e),
+  name: ExpectLabel,
+  parse: fn(String) -> Result(a, e),
+) -> Parser(b, e) {
+  let make_permutation: fn(List(#(Int, String))) ->
+    Result(#(List(#(Int, String)), Permutation(String)), PreprocessingError) = fn(
+    found_headers: List(#(Int, String)),
+  ) {
+    use #(remaining_headers, permutation) <- result.try(
+      option.unwrap(parser.make_permutation, fn(h) {
+        Ok(#(h, util.blank(list.length(h))))
+      })(found_headers),
+    )
+
+    remaining_headers
+    |> util.pop_first(case name {
+      Exact(str) -> fn(el: #(Int, String)) { el.1 == str }
+      Passes(fun) -> fn(el: #(Int, String)) { fun(el.1) }
+    })
+    |> result.map_error(fn(_) { FailedHeaderParsing(NotEnoughCells) })
+    |> result.try(fn(in) {
+      let #(#(index, _), passed_headers) = in
+      permutation
+      |> util.append_index(index)
+      |> result.map(fn(perm) { #(passed_headers, perm) })
+      |> result.map_error(fn(_) { FailedHeaderParsing(NotEnoughCells) })
+    })
+  }
+  Parser(
+    ..parser,
+    make_permutation: Some(make_permutation),
+    parse: fn(tokens: List(String)) -> Result(
+      #(b, List(String)),
+      DataRowError(e),
+    ) {
+      use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
+
+      // This case ends up being run when the parser is running.
+      // So, if the list ends up empty, that means that one row has too few elements
+      // to build the expected data type.
+      case remaining_tokens {
+        [cell, ..rest] ->
+          // TODO: Should I process the elements here, or no? I'm not sure
+          cell
+          |> parse()
+          |> result.map_error(fn(e) { CellParsingFailed(cell, e) })
+          |> result.map(constructor)
+          |> result.map(fn(b) { #(b, rest) })
+
+        [] -> Error(NotEnoughCells)
+      }
+    },
+  )
 }
 
 /// Simply skip the next `count` columns without reading their contents.
