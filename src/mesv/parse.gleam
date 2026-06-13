@@ -95,12 +95,13 @@
 
 import gleam/function
 import gleam/list
-import gleam/option.{None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
 import mesv/stream.{type Stream, Done, Next}
 import mesv/util
+
+// ==== Public Types ====
 
 /// Error type returned by the [`parse.preprocess`](parse.html#preprocess) function,
 /// representing the outcomes that could've caused preprocessing the file to fail.
@@ -140,23 +141,37 @@ pub type PreprocessingError {
 /// They are returned only when calling the [`parse.preprocess`](parse.html#preprocess) function.
 /// 
 pub type MetadataRowError {
-  /// When trying to parse a row into a `key` and `value` on a metadata separator, the row didn't contain any separators.
+  /// One of the rows was somehow empty. WTF?
+  /// 
+  EmptyRowWhenSplit(row: String)
+  /// When trying to parse a row into a `key` and `value` on a metadata separator, the row
+  /// didn't contain any separators.
   /// 
   /// The field `row` contains the row in question.
   /// 
   NoSeparator(row: String)
-  /// When trying to parse a row by splitting it on unescaped separators, it was split into more than two Substrings, meaning that there was more than one unescaped separator.
+  /// When trying to parse a row by splitting it on unescaped separators, it was split into
+  /// more than two Substrings, meaning that there was more than one unescaped separator.
   /// 
-  UnescapedSeparators(field: String)
-  /// When trying to parse a row, after separating it into a `key` and `value`, this field was found to be malformed, due to being flanked only on one end by escapers, but not on the other
+  UnescapedSeparators(key: String, value: String, rest: List(String))
+  /// When trying to parse a row, after separating it into a `key` and `value`, this field
+  /// was found to be malformed, due to being flanked only on one end by escapers, but not
+  /// on the other.
   /// 
   /// TODO : Verify if this is true, I don't exactly remember and I need to go to sleep rn
+  MetadataMismatchedEscapers(field: String)
+  /// When trying to parse a row, one of the fields was not surrounded by escapers, but had
+  /// an escaper within it.
+  /// 
   MetadataUnescapedEscapers(field: String)
-  /// When trying to parse a row, after separating it into a `key` and `value`, this field was found to have an non-duplicated escapers inside of it.
+  /// When trying to parse a row, after separating it into a `key` and `value`, this field
+  /// was found to have an non-duplicated escapers inside of it.
   /// 
-  /// This is checked by checking if the count of non-overlapping instances of escapers = 2 * count of non-overlapping instances of duplicated escapers.
+  /// This is checked by checking if the count of non-overlapping instances of escapers ==
+  /// 2 * count of non-overlapping instances of duplicated escapers.
   /// 
-  /// If that is not true, it means that there exists an escaper that was not duplicated inside of the field.
+  /// If that is not true, it means that there exists an escaper that was not duplicated
+  /// inside of the field.
   /// 
   MetadataNonDuplicatedEscapers(field: String)
 }
@@ -205,6 +220,9 @@ pub type Parser(a, b) {
 
 pub type CsvSource {
   Text(String)
+  /// If your pass in this variant of the source to `preprocess`, it is up to you to guarantee
+  /// that the rows are split on the specified row separators.
+  /// 
   RowStream(Stream(String))
 }
 
@@ -213,26 +231,53 @@ pub type CsvSource {
 /// Not certain it is the final version yet.
 /// 
 pub type ExpectedHeaders {
-  /// Ignore the contents of the first row, 
+  /// Ignore the contents of the first row, but also parse them (so syntax errors will be caught).
+  /// 
   Ignore
-  // Doesn't matter what the first row is, just skip it
+  /// Treat the first row as data (so no headers are expected).
+  /// 
   Empty
-  // Expect the file to start with the data 
+  /// Expect the first row of headers to be **exactly** in this order, with **exactly**
+  /// these elements.
+  /// 
+  /// If you set `strict_columns` for the `Parser`, the headers must also be exactly this length.
+  /// 
   InOrderExact(List(String))
-  // Expect the first row of headers to be **exactly** in this order, with **exactly** these elements
+  /// > **Note** This is not yet fully implemented!
+  /// 
+  /// Expect the first row of headers to have all of these elements, but in whatever order.
+  /// 
+  /// If two or more of the elements provided in the `List` are identical, then two of the
+  /// headers must also be identical.
+  /// 
+  /// Basically, make sure that at least this many headers are present.
+  /// 
   HeadersMustContain(List(String))
-  // Expect the first row of headers to have all of these elements, but in whatever order
+  /// Expect the first row of headers to return `True` when tested with the provided functions,
+  /// in **exact** order.
+  /// 
   InOrderMustPass(List(fn(String) -> Bool))
-  // Expect the first row of headers to return `True` when tested with the provided functions, in **exact** order.
+  /// > **Note** This is not yet fully implemented!
+  /// 
+  /// Expect each of the functions above to return `True` to at least one of the found headers.
+  /// 
   HeadersMustContainPassing(List(fn(String) -> Bool))
-  // Expect each of the functions above to return `True` to at least one of the found headers.
 }
 
+// ==== Private Types ====
+
 /// This is a bad solution to what I'm doing. It will be changed (or made privete)
-pub type HeaderAction {
+/// 
+/// Oh look, it's private now.
+/// 
+type HeaderAction {
   ParseFirstRow
   SkipFirstRow
 }
+
+// ==== Public API ====
+
+// => Builders
 
 /// Function for directly building a `Parser` that uses the subsequent elements in order.
 /// 
@@ -363,14 +408,6 @@ pub fn column(
       [] -> Error(NotEnoughCells)
     }
   })
-}
-
-fn drop(from: List(c), count: Int) -> Result(List(c), Nil) {
-  case count, from {
-    0, _ -> Ok(from)
-    _, [] -> Error(Nil)
-    remaining, [_, ..list] -> drop(list, remaining - 1)
-  }
 }
 
 /// Simply skip the next `count` columns without reading their contents.
@@ -704,8 +741,327 @@ pub fn set_strict_columns(parser: Parser(a, e)) -> Parser(a, e) {
   Parser(..parser, strict_columns: True)
 }
 
+// => Execution functions
+
+/// Preprocess the `CsvSource` by reading all of the metadata contained in the
+/// frontmatter block (started and ended by a row containing only three `-` characters, like
+/// so: `---` ), as well as the headers as specified in the
+/// [`parse.set_expected_headers`](parse.html#set_expected_headers) function.
+/// 
+/// After calling this function, pipe in the output directly to the [`parse.then`](parse.html#then)
+/// function, which will rearrange its' structure and directly call [`parse.run`](parse.html#run)
+/// function and return its' output, as long as this function returned `Ok`.
+/// 
+/// ## Output explanation
+/// Returns a `Result`:
+/// - `Error(PreprocessingError)` if the headers didn't match or there were errors encountered
+///    when parsing metadata fields
+/// - `Ok(#(List(#(String, String)), Parser(a, e), CsvSource))` if the headers did match
+/// 
+/// In the case of an `Ok`, the values are like so:
+/// - The first `List(#(String, String))` is the list of metadata at the beginning. Right now,
+///   if the user wants to do something with it, they must do so manually.
+/// - Second element `Parser(a, e)` - a modified parser to use when calling the
+///   [`parse.run`](parse.html#run) function later, with its' behaviour adjusted slightly
+///   based on the contents of the headers.
+/// - The third element `CsvSource` is the contents of the CSV file with the metadata and header
+///   row removed, which is what should go into the [`parse.run`](parse.html#run) function later.
+///   If you for some reason want to use `mesv` only for processing metadata, you could discard
+///   everything else and deconstruct this type into the raw `String`.
+/// 
+/// As of right now, the frontmatter metadata can only be parsed if it follows the grammar
+/// `key sep value newline`, where `sep` is by default `:` and `newline` is the same as the
+/// CSV newline.
+/// 
+/// Read more about this on the [MESV grammar](mesv-grammar.html) page.
+/// 
+pub fn preprocess(
+  parser: Parser(a, e),
+  source: CsvSource,
+) -> Result(
+  #(List(#(String, String)), Parser(a, e), Stream(List(String))),
+  PreprocessingError,
+) {
+  use #(row_stream, metadata) <- result.try(
+    case source {
+      Text(str) -> make_row_stream(parser)(str)
+      RowStream(stream) -> stream
+    }
+    |> make_metadata_reader(parser),
+  )
+  let split_columns = make_column_splitter(parser)
+  let process_headers = make_header_processor(parser)
+
+  let row_stream =
+    row_stream
+    |> stream.map(split_columns)
+
+  case stream.next(row_stream) {
+    Next(stream, value) -> {
+      result.try(process_headers(parser.expect_headers, value), fn(act) {
+        Ok(
+          #(metadata, parser |> set_expected_headers(Empty), case act {
+            ParseFirstRow -> stream |> stream.prepend(value)
+            SkipFirstRow -> stream
+          }),
+        )
+      })
+    }
+    Done -> Error(SourceEmpty)
+  }
+}
+
+/// Utility function to make calling the parser cleaner.
+/// 
+/// Meant to be used by piping the output from the [`preprocess`](parse.html#preprocess)
+/// function into it, the argument it takes is ugly to say the least.
+/// 
+/// Internally, it's nothing special - it uses `result.map` to deconstruct the successfull
+/// output (`metadata`, `Parser` and `CsvSource`) and uses those values to call
+/// [`parse.run`](parse.html#run), and returns its' output along with the metadata.
+/// 
+/// If you want the *maximally clean* experience, pipe this function's output into
+/// [`parse.just_data`](parse.html#just_data), which will further map the Result into
+/// `Result(List(a), PreprocessingError)` by discarding all rows which failed to parse
+/// correctly for whatever reason.
+/// 
+/// ## Examples
+/// Successfull initial parsing
+/// ```gleam
+/// parser
+/// |> parse.preprocess(Text("some,data,123"))
+/// // -> Ok([], parser, CsvSource)
+/// |> parse.then()
+/// // -> Ok([], [Ok(#("some", "data", 123))])
+/// ```
+/// Failed initial parsing
+/// ```gleam
+/// parser
+/// |> parse.preprocess(Text("\"som\"e,data,123"))
+/// // -> Error(PreprocessingError(FailedHeaderParsing(DataMismatchedEscapers("\"some\"e"))))
+/// // The errors are very verbose, I know
+/// |> parse.then()
+/// // -> Error(...) identical error as above, nothing happens.
+/// ```
+/// 
+pub fn then_run(
+  preprocessed: Result(
+    #(List(#(String, String)), Parser(a, e), Stream(List(String))),
+    PreprocessingError,
+  ),
+) -> Result(
+  #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
+  PreprocessingError,
+) {
+  preprocessed
+  |> result.map(fn(a) {
+    let #(metadata, parser, csv_source) = a
+    #(metadata, run(parser, csv_source))
+  })
+}
+
+/// Function to use the specified `Parser(a, e)` to transform the `CsvSource` into a
+/// `List(Result(a, DataRowError(e)))`.
+/// 
+/// This function does not handle metadata, headers, or anything else - it purely tries to
+/// parse each line of the `CsvSource` into the value of type `a` using the parsing function
+/// encoded inside `Parser`.
+/// 
+/// To handle headers and metadata, use [`parse.preprocess`](parse.html#preprocess)!
+/// 
+/// ## Order of operations
+/// The order of operations when parsing is as such:
+/// 1. The rows of the source `CsvSource` are split using the
+///    [`util.split_on_unescaped`](util.html#split_on_unescaped) helper function.
+/// 2. If they do, process each row in turn:
+///    - Split row `String` into a `List(String)` of raw cells
+///    - Unwrap each cell by first trimming whitespace surrounding it. If the trimmed `String`
+///      both starts and ends with the escaper, remove them and return what was wrapped in them;
+///      if not, return the original raw cell. If the trimmed string only has the escaper on
+///      *one* end, return an `Error(DataMismatchedEscapers)` error, along with the field
+///      in question
+///    - If all of the cells were successfully unwrapped without errors, proceed
+///    - Unescape each cell's contents by deduplicating the escaper characters inside.
+///      If the number of found singular escapers is not exactly twice that of the duplicated
+///      escapers, return a `DataNonDuplicatedEscapers` error, along with the field in question.
+///    - Trim the whitespace of each cell's contents according to what the user specified using
+///      the [`parse.set_trim_whitespace`](parse.html#set_trim_whitespace) function
+///    - Parse the row by passing in the contents of the cells to the parsing functions from
+///      [`parse.column`](parse.html#column), then if they return `Ok`, pass in the output
+///      to the curried constructor function passed into the [`parse.build`](parse.html#build)
+///      function. If they don't, return a `CellParsingFailed(e)` error, with the type specified
+///      by the user.
+/// 4. Return a finished `List(Result(a, DataRowError(e)))`
+/// 
+pub fn run(
+  parser: Parser(a, e),
+  source: Stream(List(String)),
+) -> Stream(Result(a, DataRowError(e))) {
+  let unescape = make_unescaper(parser)
+  let trim = make_content_trimmer(parser)
+  let finalize = make_finalizer(parser)
+  let process_row = fn(cells: List(String)) -> Result(a, DataRowError(e)) {
+    cells
+    // Unescape the String - ie, if the escape characters are present both at the beginning
+    // and end of the String, remove them, and deduplicate any internal escapers.
+    // If only one end of the String has an escaper, throw a Parsing error for this row.
+    |> list.map(unescape)
+    // Only proceed if all cells in this row are unwrapped
+    |> result.all()
+    |> result.try(fn(values: List(String)) {
+      values
+      // Trim white space according to the rules set.
+      // By this point, the string is unwrapped and unescaped, so what to do with it
+      // is up to the user.
+      |> list.map(trim)
+      // Call the Parsing function to convert the `List(String)` of values
+      // (already unescaped, unwrapped and trimmed) to try and convert it into
+      // the desired data type `a`.
+      |> parser.parse()
+      // If the parsing step succeeded, check whether there were any leftovers,
+      // and depending on the parser settings, either proceed or throw an error.
+      |> result.try(finalize)
+    })
+  }
+  source
+  |> stream.map(process_row)
+}
+
+pub fn then_collect(
+  in: Result(
+    #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
+    PreprocessingError,
+  ),
+) -> Result(
+  #(List(#(String, String)), List(Result(a, DataRowError(e)))),
+  PreprocessingError,
+) {
+  result.map(in, fn(out) {
+    let #(metadata, stream) = out
+    #(metadata, stream.to_list(stream))
+  })
+}
+
+pub fn then_collect_data(
+  in: Result(
+    #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
+    PreprocessingError,
+  ),
+) -> Result(List(Result(a, DataRowError(e))), PreprocessingError) {
+  result.map(in, fn(out) { stream.to_list(out.1) })
+}
+
+/// A helper function meant to be called with the output of [`parse.then`](parse.html#then)
+/// as the input.
+/// 
+/// It should only be used if you're sure that you only want the successfully parsed data
+/// rows, and don't care about any errors or any of the metadata.
+/// 
+/// Due to this, it should not be used in situations where errors must be handled.
+/// 
+/// Additionally, it is also quite unfriendly for debugging, as the errors are simply discarded.
+/// 
+/// ## Examples
+/// ```gleam
+/// parser
+/// |> parse.preprocess(Text("some,data,123\nmalformed\"data!"))
+/// |> parse.then()
+/// |> parse.just_data()
+/// // -> Ok([Ok("some", "data", 123)])
+/// // Malformed data is parsed into `Error`s and discarded.
+/// ```
+/// 
+pub fn then_collect_parsed(
+  processed: Result(
+    #(List(#(String, String)), Stream(Result(a, DataRowError(e)))),
+    PreprocessingError,
+  ),
+) -> Result(List(a), PreprocessingError) {
+  processed
+  |> result.map(fn(output) {
+    output.1
+    |> get_parsed()
+    |> stream.to_list()
+  })
+}
+
+/// Helper function to easily extract the successfully parsed rows from the output of
+/// the [`parse.run`](parse.html#run) function.
+/// 
+/// ## Examples
+/// Without using this function:
+/// ```gleam
+/// parse.run(parser, "1,2\n1,\ntext,1.2")
+/// // -> [ Ok(#(1, 2))
+/// //    , Error(RanOutOfValues)
+/// //    , Error(CantParseRow)
+/// //    ]
+/// ```
+/// With the function:
+/// ```gleam
+/// parse.run(parser, "1,2\n1,\ntext,1.2")
+///   |> parse.get_parsed()
+///   // -> [ #(1, 2) ]
+/// ```
+/// 
+/// Of course, this is all under the assumption that the parsing succeeded initially
+/// and started execution.
+/// 
+pub fn get_parsed(rows: Stream(Result(a, DataRowError(e)))) -> Stream(a) {
+  rows
+  |> stream.filter_map(function.identity)
+}
+
+/// > **This function is deprecated, and should be replaced by using the
+///   [`parse.preprocess`](parse.html#preprocess) and [`parse.run`](parse.html#run)
+///   functions in that order.**
+/// 
+/// Function to use the specified `Parser(a, e)` to transform the source into a `#(List(a),
+/// List(ParsingError))`.
+/// 
+/// To follow the expected previous behaviour, it returns a `Result(#(List(a),
+/// List(ParsingError)), ParsingError)`, obtained by calling `result.partition` on
+/// the list of `Result(a, ParsingError)` from parsing rows.
+/// 
+@deprecated("
+To simplify the API and comply with the Gleam convention, I have decided to split this function
+into `preprocess` and `run`.
+For ease of use, there also exists `then`, which calls `run` using the output from `preprocess`.
+Use those functions instead of this one.
+")
+pub fn parse(
+  parser: Parser(a, e),
+  source: String,
+) -> Result(#(List(a), List(DataRowError(e))), PreprocessingError) {
+  parser
+  |> preprocess(Text(source))
+  |> result.map(fn(preprocess_out) {
+    // Using this function means ignoring the parsed metadata
+    let #(_metadata, parser, row_stream) = preprocess_out
+    parser
+    |> run(row_stream)
+    |> stream.to_list()
+    |> result.partition()
+    |> pair.map_first(list.reverse)
+    |> pair.map_second(list.reverse)
+  })
+}
+
+// ==== Private Functions ====
+
+fn drop(from: List(c), count: Int) -> Result(List(c), Nil) {
+  case count, from {
+    0, _ -> Ok(from)
+    _, [] -> Error(Nil)
+    remaining, [_, ..list] -> drop(list, remaining - 1)
+  }
+}
+
 /// Internal helper function to check whether the CSV headers that were found match
 /// the expected pattern that was specified in the Parser building process.
+/// 
+/// This function MUST go. It's **86 LINES** long, and much of the expressions
+/// in the case pattern matching are identical.
 /// 
 fn make_header_processor(
   parser: Parser(a, e),
@@ -894,67 +1250,12 @@ fn make_header_processor(
   }
 }
 
-fn take_until_unescaped(
-  separator el: String,
-  not_in escaper: String,
-) -> fn(String) -> Result(#(String, String), String) {
-  fn(source: String) -> Result(#(String, String), String) {
-    take_until_unescaped_loop(source, el, escaper, None)
-    |> result.map(pair.swap)
-    |> result.map_error(fn(_) { source })
-  }
-}
-
-fn take_until_unescaped_loop(
-  from: String,
-  separator: String,
-  esc: String,
-  acc: option.Option(String),
-) -> Result(#(String, String), Nil) {
-  case string.split_once(from, on: separator) {
-    Ok(#(head, rest)) -> {
-      let value = case acc {
-        Some(s) -> s <> separator <> head
-        None -> head
-      }
-      case util.count_non_overlapping(in: value, of: esc) % 2 == 0 {
-        True -> Ok(#(value, rest))
-        False ->
-          take_until_unescaped_loop(
-            rest,
-            separator,
-            esc,
-            // Almost made the same mistake again, lmao
-            Some(value),
-          )
-      }
-    }
-    Error(Nil) -> Error(Nil)
-  }
-}
-
 fn make_row_stream(parser: Parser(a, e)) -> fn(String) -> Stream(String) {
   fn(source: String) -> Stream(String) {
     stream.from_divider(
       source,
-      take_until_unescaped(parser.row_separator, parser.escaper),
+      util.take_until_unescaped(parser.row_separator, parser.escaper),
     )
-  }
-}
-
-/// Internal function for creating a row splitting function directly from a `Parser`.
-/// 
-fn make_row_splitter(parser: Parser(a, e)) -> fn(CsvSource) -> List(String) {
-  fn(source: CsvSource) -> List(String) {
-    case source {
-      Text(str) ->
-        str
-        |> util.split_on_unescaped(
-          separator: parser.row_separator,
-          not_in: parser.escaper,
-        )
-      RowStream(stream) -> stream |> stream.to_list()
-    }
   }
 }
 
@@ -993,7 +1294,7 @@ fn make_unescaper(
   // Unescape the String - for now, just deduplicate the escaper characters
   // (According to the CSV format standard, if any doubleQuotes appear inside a cell,
   // they must be replaced with two of them, and the entire cell wrapped)
-  let deduplicate = fn(cell: String) -> String {
+  let unescape = fn(cell: String) -> String {
     cell
     |> string.remove_prefix(escaper)
     |> string.remove_suffix(escaper)
@@ -1029,7 +1330,7 @@ fn make_unescaper(
     case num_single, starts(trimmed), ends(trimmed) {
       n, True, True if n % 2 == 0 && n == num_duplicated * 2 ->
         // If it was even and wrapped in escapers, remove them along with the whitespace wrapping the cell
-        Ok(deduplicate(trimmed))
+        Ok(unescape(trimmed))
       n, False, False if n == 0 && num_duplicated == 0 -> Ok(cell)
       _, a, b if a != b -> Error(DataMismatchedEscapers(trimmed))
       n, False, False if n != 0 -> Error(DataUnescapedEscapers(trimmed))
@@ -1069,271 +1370,76 @@ fn make_finalizer(
   }
 }
 
-/// Preprocess the `source` of the CSV file by reading all of the metadata contained in the
-/// frontmatter block (started and ended by a row containing only three `-` characters, like
-/// so: `---` ) as well as the headers as specified in the `expect_headers` function.
-/// 
-/// ### Return explanation
-/// Returns a `Result`:
-/// - `Error(String)` if the headers didn't match
-/// - `Ok(#(List(#(String, String)), Parser(a, e), String))` if the headers did match.
-/// 
-/// In the case of an `Ok`, the values are like so:
-/// - The first `List(#(String, String))` is the list of metadata at the beginning. Right now,
-///   if the user wants to do something with it, they must do so manually.
-/// - Second element `Parser(a, e)` - a modified parser to use when calling the
-///   [`parse.run`](parse.html#run) function later - it will expect that the first row
-///   is the first data point, and will behave accordingly.
-/// - The third element `String` is the contents of the CSV file with the metadata and header
-///   row removed, which is what should go into the [`parse.run`](parse.html#run) function later.
-///   If you for some reason want to use `mesv` only for processing metadata, you could discard
-///   everything else and parse this `String` with another library.
-/// 
-/// As of right now, the frontmatter metadata can only be parsed if it follows the grammar
-/// `key sep value newline`, where `sep` is by default `:` and `newline` is the same as the
-/// CSV newline.
-/// 
-/// Read more about this on the [MESV grammar](mesv-grammar.html) page.
-/// 
-pub fn preprocess(
+fn make_metadata_reader(
   parser: Parser(a, e),
-  source: CsvSource,
-) -> Result(
-  #(List(#(String, String)), Parser(a, e), CsvSource),
-  PreprocessingError,
-) {
-  let #(row_stream, metadata) =
-    case source {
-      Text(str) -> make_row_stream(parser)(str)
-      RowStream(stream) -> stream
-    }
-    |> read_metadata(make_metadata_parser(parser))
+) -> fn(Stream(String)) ->
+  Result(#(Stream(String), List(#(String, String))), PreprocessingError) {
+  let metadata_parser = make_metadata_parser(parser)
+  fn(rows: Stream(String)) {
+    case stream.next(rows) {
+      Next(stream, "---") -> {
+        let #(stream, metadata_results) =
+          stream
+          |> stream.collect_until(fn(row: String) -> Bool { row == "---" })
+          |> pair.map_second(list.map(_, metadata_parser))
+          |> pair.map_first(stream.drop(_, 1))
 
-  let process_headers = make_header_processor(parser)
-
-  case stream.next(row_stream) {
-    Next(stream, value) -> {
-      use row_stream <- result.try(
-        case
-          process_headers(
-            parser.expect_headers,
-            make_column_splitter(parser)(value),
-          )
-        {
-          Ok(SkipFirstRow) -> Ok(stream)
-          Ok(ParseFirstRow) -> Ok(stream.prepend(stream, value))
-          Error(err) -> Error(err)
-        },
-      )
-      let parser = parser |> set_expected_headers(Empty)
-      let data = row_stream |> RowStream
-      Ok(#(metadata, parser, data))
+        result.all(metadata_results)
+        |> result.map_error(fn(_) {
+          metadata_results
+          |> list.filter_map(fn(r) {
+            case r {
+              Ok(_) -> Error(Nil)
+              Error(err) -> Ok(err)
+            }
+          })
+          |> MetadataParsing
+        })
+        |> result.map(fn(metadata) { #(stream, metadata) })
+      }
+      Next(stream, row) -> Ok(#(stream.prepend(stream, row), []))
+      Done -> Ok(#(stream.empty(), []))
     }
-    Done -> Error(SourceEmpty)
-  }
-}
-
-fn read_metadata(
-  rows: Stream(String),
-  parse_metadata_row: fn(String) -> Result(#(String, String), Nil),
-) -> #(Stream(String), List(#(String, String))) {
-  case stream.next(rows) {
-    Next(stream, "---") -> {
-      stream
-      |> stream.collect_until(fn(row: String) -> Bool { row == "---" })
-      |> pair.map_second(list.filter_map(_, parse_metadata_row))
-      |> pair.map_first(stream.drop(_, 1))
-    }
-    Next(stream, row) -> #(stream.prepend(stream, row), [])
-    Done -> #(stream.empty(), [])
   }
 }
 
 fn make_metadata_parser(
   parser: Parser(a, e),
-) -> fn(String) -> Result(#(String, String), Nil) {
+) -> fn(String) -> Result(#(String, String), MetadataRowError) {
   let unescape = make_unescaper(parser)
-  fn(row: String) -> Result(#(String, String), Nil) {
-    case take_until_unescaped_loop(row, ":", parser.escaper, None) {
-      Ok(#(key, value)) -> {
+  fn(row: String) -> Result(#(String, String), MetadataRowError) {
+    case util.split_on_unescaped(separator: ":", not_in: parser.escaper)(row) {
+      [] -> Error(EmptyRowWhenSplit(row))
+      [_] -> Error(NoSeparator(row))
+      [key, value] ->
         case unescape(key), unescape(value) {
           Ok(unescaped_key), Ok(unescaped_value) ->
             Ok(#(unescaped_key, unescaped_value))
-          _, _ -> Error(Nil)
+          Ok(_), Error(err) -> Error(data_row_to_metadata_row(err))
+          Error(err), _ -> Error(data_row_to_metadata_row(err))
         }
-      }
-      Error(Nil) -> Error(Nil)
+      [key, value, ..rest] -> Error(UnescapedSeparators(key, value, rest))
     }
   }
 }
 
-/// Function to use the specified `Parser(a, e)` to transform the `source` into a
-/// `Result(List(Result(a, ParsingError)))`.
+/// A shitty solution to the problem I was having.
 /// 
-/// If the headers specified in the [`parse.set_expected_headers`](parse.html#set_expected_headers)
-/// function did not match the first row contents, a `ParsingError` will be returned, of the type
-/// `ExpectedHeadersMismatch`, containing both the expected headers and what was found.
+/// TODO : Rethink this structure maybe?
 /// 
-/// If the headers weren't specified, or were specified and match the expected pattern,
-/// the function will return `Ok(List(Result(a, ParsingError)))`.
-/// 
-/// If you need a simple way to get the `List(a)` out of that, use the
-/// [`parse.get_parsed`](parse.html#get_parsed) function.
-/// 
-/// The first is the list of all rows that were successfully parsed, while the second is a
-/// list of `ParsingError`s that were thrown due to a row failing to parse.
-/// 
-/// > What to do with both of these Lists is up to the user, whether to ignore all errors or abort
-///   if any errors occur.
-/// 
-/// ## Order of operations
-/// The order of operations when parsing is as such:
-/// 1. The rows of the source `String` are split using the
-///    [`util.split_on_unescaped`](util.html#split_on_unescaped) helper function.
-/// 2. If the `List(String)` of the rows is not empty, first check if the headers match what
-///    the user specified.
-/// 3. If they do, process each row in turn:
-///    - Split row `String` into a `List(String)` of raw cells
-///    - Unwrap each cell by first trimming whitespace surrounding it. If the trimmed `String`
-///      both starts and ends with the escaper, remove them and return what was wrapped in them;
-///      if not, return the original raw cell. If the trimmed string only has the escaper on
-///      *one* end, return an `Error(MalformedCell)`.
-///    - If all of the cells returned an `Ok`, proceed
-///    - Unescape each cell's contents by deduplicating the escaper characters
-///    - Trim the whitespace of each cell according to what the user specified using the
-///      [`parse.set_trim_whitespace`](parse.html#set_trim_whitespace) function
-///    - Parse the row by passing in the contents of the cells to the parsing functions from
-///      [`parse.column`](parse.html#column), then if they return `Ok`, passing in the output
-///      to the curried constructor function passed into the [`parse.build`](parse.html#build)
-///      function
-/// 4. Return a `List(Result(a, ParsingError))` and wrap it in `Ok`
-/// 
-pub fn run(
-  parser: Parser(a, e),
-  source: CsvSource,
-) -> List(Result(a, DataRowError(e))) {
-  case make_row_splitter(parser)(source) {
-    // Empty file - just return an empty list.
-    [] -> []
-    [headers, ..contents] -> {
-      // A locally defined function capturing the parser data, that is used for processing each row
-      let process_row = fn(cells: List(String)) -> Result(a, DataRowError(e)) {
-        cells
-        // Unescape the String - ie, if the escape characters are present both at the beginning
-        // and end of the String, remove them, and deduplicate any internal escapers.
-        // If only one end of the String has an escaper, throw a Parsing error for this row.
-        |> list.map(make_unescaper(parser))
-        // Only proceed if all cells in this row are unwrapped
-        |> result.all()
-        |> result.try(fn(elements: List(String)) -> Result(a, DataRowError(e)) {
-          elements
-          // Trim white space according to the rules set.
-          // By this point, the string is unwrapped and unescaped, so what to do with it
-          // is up to the user.
-          |> list.map(make_content_trimmer(parser))
-          // Call the Parsing function to convert the `List(String)` of elements
-          // (already unescaped, unwrapped and trimmed) to try and convert it into
-          // the desired data type `a`.
-          |> parser.parse()
-          // If the parsing step succeeded, check whether there were any leftovers,
-          // and depending on the parser settings, either proceed or throw an error.
-          |> result.try(make_finalizer(parser))
-        })
-      }
-
-      let contents = case parser.expect_headers {
-        Ignore -> contents
-        _ -> [headers, ..contents]
-      }
-
-      contents
-      |> list.map(fn(row_string) {
-        // All of the parsing functions are condensed here to avoid having to map multiple times.
-        row_string
-        |> make_column_splitter(parser)
-        |> process_row()
-      })
-    }
+fn data_row_to_metadata_row(err: DataRowError(e)) -> MetadataRowError {
+  case err {
+    DataUnescapedEscapers(field) -> MetadataUnescapedEscapers(field)
+    DataMismatchedEscapers(field) -> MetadataMismatchedEscapers(field)
+    DataNonDuplicatedEscapers(field) -> MetadataNonDuplicatedEscapers(field)
+    NotEnoughCells ->
+      NoSeparator("Created by converting from DataRowError `NotEnoughCells`")
+    TooManyCells(leftovers) ->
+      UnescapedSeparators("dummy key", "dummy value", leftovers)
+    CellParsingFailed(reason, _) ->
+      NoSeparator(
+        "Created by converting from DataRowError `CellParsingFailed`. Reason: "
+        <> reason,
+      )
   }
-}
-
-/// > **This function is deprecated, and should be replaced with the
-///   [`parse.run`](parse.html#run) function.**
-/// 
-/// Function to use the specified `Parser(a, e)` to transform the source into a `#(List(a),
-/// List(ParsingError))`.
-/// 
-/// To follow the expected previous behaviour, it returns a `Result(#(List(a),
-/// List(ParsingError)), ParsingError)`, obtained by calling `result.partition` on
-/// the list of `Result(a, ParsingError)` from parsing rows.
-/// 
-@deprecated("
-To simplify the API and comply with the Gleam convention, I have decided to rename the parse
-function to `run`. This function is still available to call, but should be replaced if possible.
-In new code, use the `run` function.
-")
-pub fn parse(
-  parser: Parser(a, e),
-  source: String,
-) -> Result(#(List(a), List(DataRowError(e))), PreprocessingError) {
-  preprocess(parser, Text(source))
-  |> result.map(fn(preprocess_out) {
-    // Using this function means ignoring the parsed metadata
-    let #(_metadata, parser, csv_source) = preprocess_out
-    run(parser, csv_source)
-    |> result.partition
-    |> pair.map_first(list.reverse)
-    |> pair.map_second(list.reverse)
-  })
-}
-
-/// Helper function to easily extract the successfully parsed rows from the output of
-/// the [`parse.run`](parse.html#run) function.
-/// 
-/// ## Examples
-/// Without using this function:
-/// ```gleam
-/// parse.run(parser, "1,2\n1,\ntext,1.2")
-/// // -> [ Ok(#(1, 2))
-/// //    , Error(RanOutOfValues)
-/// //    , Error(CantParseRow)
-/// //    ]
-/// ```
-/// With the function:
-/// ```gleam
-/// parse.run(parser, "1,2\n1,\ntext,1.2")
-///   |> parse.get_parsed()
-///   // -> [ #(1, 2) ]
-/// ```
-/// 
-/// Of course, this is all under the assumption that the parsing succeeded initially
-/// and started execution.
-/// 
-pub fn get_parsed(rows: List(Result(a, DataRowError(e)))) -> List(a) {
-  rows |> list.filter_map(function.identity)
-}
-
-pub fn then(
-  preprocessed: Result(
-    #(List(#(String, String)), Parser(a, e), CsvSource),
-    PreprocessingError,
-  ),
-) -> Result(
-  #(List(#(String, String)), List(Result(a, DataRowError(e)))),
-  PreprocessingError,
-) {
-  preprocessed
-  |> result.map(fn(a) {
-    let #(metadata, parser, csv_source) = a
-    #(metadata, run(parser, csv_source))
-  })
-}
-
-pub fn just_data(
-  processed: Result(
-    #(List(#(String, String)), List(Result(a, DataRowError(e)))),
-    PreprocessingError,
-  ),
-) -> Result(List(Result(a, DataRowError(e))), PreprocessingError) {
-  result.map(processed, pair.second)
 }

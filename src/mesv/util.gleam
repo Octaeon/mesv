@@ -1,15 +1,21 @@
-//// A file containing various utility functions that don't exactly fit into any of the other modules.
+//// A file containing various utility functions that don't exactly fit into any of the other
+//// modules.
 //// 
-//// They are purely for internal use - but since most of them are generic, there's nothing stopping you, as the end user, from calling them in your own code.
+//// They are purely for internal use - but since most of them are generic, there's nothing
+//// stopping you, as the end user, from calling them in your own code.
 //// 
 //// However, beacause:
 ////  1. I doubt most people would find themselves in a situation where they need them
 ////  2. They are not particularly easy to understand
 //// 
-//// these functions are not considered part of the functionality provided by this library, and therefore are not documented that well.
+//// these functions are not considered part of the functionality provided by this library,
+//// and therefore are not documented that well.
+//// 
 
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/pair
+import gleam/result
 import gleam/string
 
 /// Internal helper function that traverses a list, calling the provided `merge` function on
@@ -38,22 +44,29 @@ fn list_merge_map_loop(
   }
 }
 
-/// Internal helper function to count how many **overlapping** occurences of the first argument
-/// appear in the second argument.
+/// Internal helper function to count how many **overlapping** occurences of the first
+/// argument appear in the second argument.
 /// 
-/// If there are none, this function returns the length of the second argument.
+/// If the first argument(the target to count occurences of) is an empty string, return
+/// the length of the second input.
 /// 
 pub fn count_overlapping(of find: String, in in: String) -> Int {
   case string.is_empty(find) {
-    // If the string to search for is empty, assume the user is trying to find the length of the string they're searching
+    // If the string to search for is empty, assume the user is trying to find the
+    // length of the string they're searching
     True -> string.length(in)
-    False ->
+    False -> {
+      let len = string.length(find)
+      let matches = fn(str) { string.slice(str, 0, len) == find }
       recursive_count(
         in,
         fn(source: String) -> #(String, Int) {
           #(
+            // With each step of the function, we drop 1 character. Thus, if the string
+            // we're searching for is more than 1 character, the next comparison will be
+            // overlapping with this one.
             string.drop_start(source, 1),
-            case string.slice(source, 0, string.length(find)) == find {
+            case matches(source) {
               True -> 1
               False -> 0
             },
@@ -62,34 +75,43 @@ pub fn count_overlapping(of find: String, in in: String) -> Int {
         string.is_empty,
         0,
       )
+    }
   }
 }
 
-/// Internal helper function to count how many **non-overlapping** occurences of the first argument
-/// appear in the second argument.
+/// Internal helper function to count how many **non-overlapping** occurences of the first
+/// argument appear in the second argument.
 /// 
-/// If there are none, this function returns the length of the second argument.
+/// If the first argument(the target to count occurences of) is an empty string, return
+/// the length of the second input.
 /// 
 pub fn count_non_overlapping(in in: String, of find: String) -> Int {
   case string.is_empty(find) {
-    // If the string to search for is empty, assume the user is trying to find the length of the string they're searching
+    // If the string to search for is empty, assume the user is trying to find the
+    // length of the string they're searching
     True -> string.length(in)
-    False ->
+    False -> {
+      let len = string.length(find)
+      let matches = fn(str) { string.slice(str, 0, len) == find }
       recursive_count(
         in,
         fn(source: String) -> #(String, Int) {
-          let len = string.length(find)
-          #(
-            string.drop_start(source, len),
-            case string.slice(source, 0, len) == find {
-              True -> 1
-              False -> 0
-            },
-          )
+          // Sneaky little bug.
+          case matches(source) {
+            // If we do find the string we're searching for, drop its' length, so that the
+            // next comparison will not overlap with it
+            True -> #(string.drop_start(source, len), 1)
+            // If we don't find the string, drop only 1 character, not the length. Here was
+            // the bug - we were stepping through the String in chunks the length of the
+            // target string, so if the target substring location was offset by some integer
+            // that was not a multiple of its' length, then we wouldn't find it.
+            False -> #(string.drop_start(source, 1), 0)
+          }
         },
         string.is_empty,
         0,
       )
+    }
   }
 }
 
@@ -139,7 +161,6 @@ pub fn split_on_unescaped(
   separator el: String,
   not_in escaper: String,
 ) -> fn(String) -> List(String) {
-  // Change done :)
   fn(to_split: String) -> List(String) {
     to_split
     // First split the string on the separator
@@ -153,5 +174,159 @@ pub fn split_on_unescaped(
         False -> None
       }
     })
+  }
+}
+
+pub fn take_until_unescaped(
+  separator el: String,
+  not_in escaper: String,
+) -> fn(String) -> Result(#(String, String), String) {
+  fn(source: String) -> Result(#(String, String), String) {
+    take_until_unescaped_loop(source, el, escaper, None)
+    |> result.map(pair.swap)
+    |> result.map_error(fn(_) { source })
+  }
+}
+
+fn take_until_unescaped_loop(
+  from: String,
+  separator: String,
+  esc: String,
+  acc: option.Option(String),
+) -> Result(#(String, String), Nil) {
+  case string.split_once(from, on: separator) {
+    Ok(#(head, rest)) -> {
+      let value = case acc {
+        Some(s) -> s <> separator <> head
+        None -> head
+      }
+      case count_non_overlapping(in: value, of: esc) % 2 == 0 {
+        True -> Ok(#(value, rest))
+        False ->
+          take_until_unescaped_loop(
+            rest,
+            separator,
+            esc,
+            // Almost made the same mistake again, lmao
+            Some(value),
+          )
+      }
+    }
+    Error(Nil) -> Error(Nil)
+  }
+}
+
+/// Utility function to convert a list into a string, using the provided function.
+/// 
+/// Since this is mainly for my own use, it's structured how I like it:
+/// 
+/// It wraps the entire list in square brackets, and separates each element with ', '
+/// 
+/// ## Example
+/// ```gleam
+/// assert list_to_string(["first", "second", "another"], function.identity)
+///   == "[ \"first\", \"second\", \"another\" ]"
+/// ```
+/// 
+pub fn list_to_string(l: List(a), to_str: fn(a) -> String) -> String {
+  case l {
+    [] -> "[ Empty ]"
+    non_empty ->
+      non_empty
+      |> list.map(fn(s) { "\"" <> to_str(s) <> "\"" })
+      |> string.join(", ")
+      |> fn(s) { "[ " <> s <> " ]" }
+  }
+}
+
+/// A modified `list.map2` function that also accepts a default value for `List(b)`,
+/// and if the length of `List(b)` is less than that of `List(a)`, the default value
+/// provided for `b` is used for the mapping function.
+/// 
+pub fn map2_default(
+  first: List(a),
+  second: List(b),
+  default_b: b,
+  fun: fn(a, b) -> c,
+) -> List(c) {
+  map2_default_loop(first, second, default_b, fun, [])
+}
+
+fn map2_default_loop(
+  first: List(a),
+  second: List(b),
+  default_b: b,
+  fun: fn(a, b) -> c,
+  acc: List(c),
+) -> List(c) {
+  case first, second {
+    [], _ -> list.reverse(acc)
+    [head_first, ..rest_first], [] ->
+      map2_default_loop(rest_first, [], default_b, fun, [
+        fun(head_first, default_b),
+        ..acc
+      ])
+    [head_first, ..rest_first], [head_second, ..rest_second] ->
+      map2_default_loop(rest_first, rest_second, default_b, fun, [
+        fun(head_first, head_second),
+        ..acc
+      ])
+  }
+}
+
+/// A modified `util.map2_default` function specifically for mapping `List(a)` together with
+/// `List(Option(b))`. If the value at an index `i` of `List(b)` corresponding to some `a`
+/// is `None`, or if `List(b)` ran out of values, the default value provided for `b` is used
+/// for the mapping function.
+/// 
+pub fn map2_default_option(
+  first: List(a),
+  second: List(Option(b)),
+  default_b: b,
+  fun: fn(a, b) -> c,
+) -> List(c) {
+  map2_default_option_loop(first, second, default_b, fun, [])
+}
+
+fn map2_default_option_loop(
+  first: List(a),
+  second: List(Option(b)),
+  default_b: b,
+  fun: fn(a, b) -> c,
+  acc: List(c),
+) -> List(c) {
+  case first, second {
+    [], _ -> list.reverse(acc)
+    [head_first, ..rest_first], [] ->
+      map2_default_option_loop(rest_first, [], default_b, fun, [
+        fun(head_first, default_b),
+        ..acc
+      ])
+    [head_first, ..rest_first], [Some(head_second), ..rest_second] ->
+      map2_default_option_loop(rest_first, rest_second, default_b, fun, [
+        fun(head_first, head_second),
+        ..acc
+      ])
+    [head_first, ..rest_first], [None, ..rest_second] ->
+      map2_default_option_loop(rest_first, rest_second, default_b, fun, [
+        fun(head_first, default_b),
+        ..acc
+      ])
+  }
+}
+
+/// Internal function that pads a `List(a)` with element `a` until the `List` is of length `c`.
+/// 
+/// If the List is already the specified length or longer, it is returned unchanged.
+/// 
+pub fn pad_list_end_with(pad l: List(a), until c: Int, with el: a) -> List(a) {
+  case c {
+    // If the pad target is non-positive, exit the function immediately
+    n if n <= 0 -> l
+    // Else try to pad to the target
+    count ->
+      el
+      |> list.repeat(count - list.length(l))
+      |> list.append(l, _)
   }
 }

@@ -44,39 +44,39 @@ pub fn split_on_unescaped_nested_multiple_escaper_test() -> Nil {
     as "Split on unescaped | Multiple escapers in the middle"
 }
 
-pub fn count_occurences_empty_string_test() -> Nil {
+pub fn count_overlapping_empty_string_test() -> Nil {
   assert util.count_overlapping(of: "\"", in: "") == 0
-    as "Count Occurences | Empty string search"
+    as "Count Overlapping | Empty string search"
 }
 
-pub fn count_occurences_empty_search_test() -> Nil {
+pub fn count_overlapping_empty_search_test() -> Nil {
   // Due to how I implemented this function, I decided that when counting the number of occurences of
   // empty strings in a string `a`, the output will be the length of `a`.
   assert util.count_overlapping(of: "", in: "What is it even searching for?")
     == 30
-    as "Count Occurences | Search for empty string"
+    as "Count Overlapping | Search for empty string"
 }
 
-pub fn count_occurences_none_test() -> Nil {
+pub fn count_overlapping_none_test() -> Nil {
   assert util.count_overlapping(of: ",", in: "and this") == 0
-    as "Count Occurences | Zero present"
+    as "Count Overlapping | Zero present"
 }
 
-pub fn count_occurences_basic_test() -> Nil {
+pub fn count_overlapping_basic_test() -> Nil {
   assert util.count_overlapping(of: ",", in: "and, this") == 1
-    as "Count Occurences | Basic case"
+    as "Count Overlapping | Basic case"
 }
 
-pub fn count_occurences_invisible_characters_test() -> Nil {
+pub fn count_overlapping_invisible_characters_test() -> Nil {
   assert util.count_overlapping(
       of: "\n",
       in: "basically\nequivalent\nto\ncounting\nhow many\nlines\nthere are",
     )
     == 6
-    as "Count Occurences | Invisible characters"
+    as "Count Overlapping | Invisible characters"
 }
 
-pub fn count_occurences_list_test() -> Nil {
+pub fn count_overlapping_list_test() -> Nil {
   let data = [
     #("whatever", "e", 2),
     #("maybe count \"doublequotes\"", "\"", 2),
@@ -89,13 +89,72 @@ pub fn count_occurences_list_test() -> Nil {
   ]
   assert list.map(data, fn(a) { util.count_overlapping(of: a.1, in: a.0) })
     == list.map(data, fn(a) { a.2 })
-    as "Count Occurences | List of tests"
+    as "Count Overlapping | List of tests"
 }
 
-pub fn count_occurences_word_test() -> Nil {
+pub fn count_overlapping_word_test() -> Nil {
   let data =
     "I want to count the number of multi-character strings in this sentence, to check if my function works for finding Strings that are more than a single character.
     to do this, I will need to use a sliding window instead of consuming the input one character by one character"
   assert util.count_overlapping(of: "to", in: data) == 4
-    as "Count Occurences | Count occurences of multi-character substrings"
+    as "Count Overlapping | Count occurences of multi-character substrings"
+}
+
+pub fn count_non_overlapping_empty_string_test() -> Nil {
+  assert util.count_non_overlapping(of: "\"", in: "") == 0
+    as "Count Non-overlapping | Empty string search"
+}
+
+pub fn count_non_overlapping_empty_search_test() -> Nil {
+  // Due to how I implemented this function, I decided that when counting the number of occurences of
+  // empty strings in a string `a`, the output will be the length of `a`.
+  assert util.count_non_overlapping(
+      of: "",
+      in: "What is it even searching for?",
+    )
+    == 30
+    as "Count Non-overlapping | Search for empty string"
+}
+
+pub fn count_non_overlapping_none_test() -> Nil {
+  assert util.count_non_overlapping(of: ",", in: "and this") == 0
+    as "Count Non-overlapping | Zero present"
+}
+
+pub fn count_non_overlapping_basic_test() -> Nil {
+  assert util.count_non_overlapping(of: ",", in: "and, this") == 1
+    as "Count Non-overlapping | Basic case"
+}
+
+pub fn count_non_overlapping_invisible_characters_test() -> Nil {
+  assert util.count_non_overlapping(
+      of: "\n",
+      in: "basically\nequivalent\nto\ncounting\nhow many\nlines\nthere are",
+    )
+    == 6
+    as "Count Non-overlapping | Invisible characters"
+}
+
+pub fn count_non_overlapping_list_test() -> Nil {
+  let data = [
+    #("whatever", "e", 2),
+    #("maybe count \"doublequotes\"", "\"", 2),
+    #(
+      "\"OH NO, I FORGOT TO \"\"**ESCAPE**\"\" THE LAST TEST CASE!!!!\"",
+      "\"",
+      6,
+    ),
+    #("I'm running out of ideas...", " ", 4),
+  ]
+  assert list.map(data, fn(a) { util.count_non_overlapping(of: a.1, in: a.0) })
+    == list.map(data, fn(a) { a.2 })
+    as "Count Non-overlapping | List of tests"
+}
+
+pub fn count_non_overlapping_word_test() -> Nil {
+  let data =
+    "I want to count the number of multi-character strings in this sentence, to check if my function works for finding Strings that are more than a single character.
+    to do this, I will need to use a sliding window instead of consuming the input one character by one character"
+  assert util.count_non_overlapping(of: "to", in: data) == 4
+    as "Count Non-overlapping | Count occurences of multi-character substrings"
 }

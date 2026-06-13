@@ -9,11 +9,12 @@
 //// 
 
 import gleam/list
-import gleam/result
 import mesv/format.{type Formatter}
 import mesv/parse.{
-  type DataRowError, type Parser, type PreprocessingError, InOrderExact, Text,
+  type DataRowError, type Parser, type PreprocessingError, InOrderExact,
+  RowStream,
 }
+import mesv/stream
 import mesv_test.{type RowData}
 
 fn build_test_unit_parser_and_formatter(
@@ -47,16 +48,13 @@ fn build_test_unit(
     formatter
     |> format.set_headers(headers)
     |> format.preprocess(metadata)
-    |> format.then(rows)
-    |> fn(str: String) {
+    |> format.then_run(stream.from_list(rows))
+    |> fn(stream) {
       parser
       |> parse.set_expected_headers(InOrderExact(headers))
-      |> parse.preprocess(Text(str))
-      // |> result.map_error(fn(_) { RanOutOfValues })
-      |> result.map(fn(preprocess_out) {
-        let #(parsed_metadata, parser, csv_source) = preprocess_out
-        #(parsed_metadata, parse.run(parser, csv_source))
-      })
+      |> parse.preprocess(RowStream(stream))
+      |> parse.then_run()
+      |> parse.then_collect()
     }
   }
 }
