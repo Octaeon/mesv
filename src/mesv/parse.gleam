@@ -213,11 +213,6 @@ pub opaque type Parser(a, b) {
     escaper: String,
     metadata_separator: String,
     mode: ParserMode,
-    expect_headers: ExpectedHeaders,
-    make_permutation: Option(
-      fn(List(#(Int, String))) ->
-        Result(#(List(#(Int, String)), Permutation(String)), PreprocessingError),
-    ),
     parse: fn(List(String)) -> Result(#(a, List(String)), DataRowError(b)),
     strict_columns: Bool,
     trim_whitespace: #(Bool, Bool),
@@ -253,9 +248,11 @@ pub type ExpectedHeaders {
 
 type ParserMode {
   Unset
-  InOrder
-  OrderedVerify
-  ColumnBased
+  Ordered(expected: ExpectedHeaders)
+  ColumnBased(
+    make_permuter: fn(List(#(Int, String))) ->
+      Result(#(List(#(Int, String)), Permutation(String)), PreprocessingError),
+  )
 }
 
 // ==== Public API ====
@@ -304,8 +301,6 @@ pub fn build(f: fn(a) -> b) -> Parser(fn(a) -> b, e) {
     metadata_separator: ":",
     escaper: "\"",
     mode: Unset,
-    expect_headers: Empty,
-    make_permutation: None,
     parse: fn(tokens: List(String)) -> Result(
       #(fn(a) -> b, List(String)),
       DataRowError(e),
@@ -337,28 +332,35 @@ pub fn column(
   parser: Parser(fn(a) -> b, e),
   parse: fn(String) -> Result(a, e),
 ) -> Parser(b, e) {
-  assert parser.mode == Unset || parser.mode == InOrder
-  Parser(..parser, mode: InOrder, parse: fn(tokens: List(String)) -> Result(
-    #(b, List(String)),
-    DataRowError(e),
-  ) {
-    use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
+  Parser(
+    ..parser,
+    mode: case parser.mode {
+      Unset -> Ordered(Empty)
+      Ordered(expected) -> Ordered(expected)
+      ColumnBased(_) -> panic
+    },
+    parse: fn(tokens: List(String)) -> Result(
+      #(b, List(String)),
+      DataRowError(e),
+    ) {
+      use #(constructor, remaining_tokens) <- result.try(parser.parse(tokens))
 
-    // This case ends up being run when the parser is running.
-    // So, if the list ends up empty, that means that one row has too few elements
-    // to build the expected data type.
-    case remaining_tokens {
-      [cell, ..rest] ->
-        // TODO: Should I process the elements here, or no? I'm not sure
-        cell
-        |> parse()
-        |> result.map_error(fn(e) { CellParsingFailed(cell, e) })
-        |> result.map(constructor)
-        |> result.map(fn(b) { #(b, rest) })
+      // This case ends up being run when the parser is running.
+      // So, if the list ends up empty, that means that one row has too few elements
+      // to build the expected data type.
+      case remaining_tokens {
+        [cell, ..rest] ->
+          // TODO: Should I process the elements here, or no? I'm not sure
+          cell
+          |> parse()
+          |> result.map_error(fn(e) { CellParsingFailed(cell, e) })
+          |> result.map(constructor)
+          |> result.map(fn(b) { #(b, rest) })
 
-      [] -> Error(NotEnoughCells)
-    }
-  })
+        [] -> Error(NotEnoughCells)
+      }
+    },
+  )
 }
 
 pub fn labelled_column(
@@ -366,16 +368,20 @@ pub fn labelled_column(
   name: Predicate(String),
   parse: fn(String) -> Result(a, e),
 ) -> Parser(b, e) {
-  assert parser.mode == Unset || parser.mode == ColumnBased
+  let blank = fn(h) { Ok(#(h, util.blank(list.length(h)))) }
+  case parser.mode {
+    Unset -> ColumnBased(blank)
+    ColumnBased(make_permuter) -> ColumnBased(make_permuter)
+    Ordered(_) -> panic
+  }
   let make_permutation = fn(found_headers: List(#(Int, String))) -> Result(
     #(List(#(Int, String)), Permutation(String)),
     PreprocessingError,
   ) {
-    use #(remaining_headers, permutation) <- result.try(
-      option.unwrap(parser.make_permutation, fn(h) {
-        Ok(#(h, util.blank(list.length(h))))
-      })(found_headers),
-    )
+    use #(remaining_headers, permutation) <- result.try(option.unwrap(
+      parser.make_permutation,
+      blank,
+    )(found_headers))
     remaining_headers
     |> util.pop_first(fn(el: #(Int, String)) { util.check(name, el.1) })
     |> result.map_error(fn(_) { FailedHeaderParsing(NotEnoughCells) })
@@ -468,9 +474,9 @@ pub fn set_expected_headers(
   headers: ExpectedHeaders,
 ) -> Parser(a, e) {
   assert parser.mode == Unset
-    || parser.mode == InOrder
-    || parser.mode == OrderedVerify
-  Parser(..parser, mode: OrderedVerify, expect_headers: headers)
+    || parser.mode == Ordered
+    || parser.mode == Ordered
+  Parser(..parser, mode: Ordered, expect_headers: headers)
 }
 
 /// Helper function for converting exact `ExpectedHeaders` into broader comparisons, by first
@@ -551,11 +557,11 @@ pub fn expect_headers(
   headers: List(String),
 ) -> Parser(a, e) {
   assert parser.mode == Unset
-    || parser.mode == InOrder
-    || parser.mode == OrderedVerify
+    || parser.mode == Ordered
+    || parser.mode == Ordered
   Parser(
     ..parser,
-    mode: OrderedVerify,
+    mode: Ordered,
     expect_headers: VerifyOrdered(list.map(headers, util.equivalent)),
   )
 }
@@ -1366,11 +1372,11 @@ fn process_headers(
           echo "Parser mode unset when processing headers"
           Error(SourceEmpty)
         }
-        InOrder, VerifyOrdered(_) -> {
+        Ordered, VerifyOrdered(_) -> {
           echo "Wrong parser mode set for verifying"
           Error(SourceEmpty)
         }
-        InOrder, expected | OrderedVerify, expected ->
+        Ordered, expected | Ordered, expected ->
           case expected {
             Ignore -> Ok(#(new_parser, rest))
             Empty -> Ok(#(new_parser, rest |> stream.prepend(header_row)))
