@@ -102,7 +102,8 @@ import gleam/pair
 import gleam/result
 import gleam/string
 import mesv/stream.{type Stream, Done, Next}
-import mesv/util.{type Permutation, type Predicate}
+import mesv/util.{type Predicate}
+import twister.{type Permutation}
 
 // ==== Public Types ====
 
@@ -251,7 +252,7 @@ type ParserMode {
   Ordered(expected: ExpectedHeaders)
   ColumnBased(
     make_permuter: fn(List(#(Int, String))) ->
-      Result(#(List(#(Int, String)), Permutation(String)), PreprocessingError),
+      Result(#(List(#(Int, String)), Permutation), PreprocessingError),
   )
 }
 
@@ -368,29 +369,23 @@ pub fn labelled_column(
   name: Predicate(String),
   parse: fn(String) -> Result(a, e),
 ) -> Parser(b, e) {
-  let blank = fn(h) { Ok(#(h, util.blank(list.length(h)))) }
-  case parser.mode {
-    Unset -> ColumnBased(blank)
-    ColumnBased(make_permuter) -> ColumnBased(make_permuter)
+  let blank = fn(h) { Ok(#(h, twister.blank())) }
+  let m = case parser.mode {
+    Unset -> blank
+    ColumnBased(make_permuter) -> make_permuter
     Ordered(_) -> panic
   }
   let make_permutation = fn(found_headers: List(#(Int, String))) -> Result(
-    #(List(#(Int, String)), Permutation(String)),
+    #(List(#(Int, String)), Permutation),
     PreprocessingError,
   ) {
-    use #(remaining_headers, permutation) <- result.try(option.unwrap(
-      parser.make_permutation,
-      blank,
-    )(found_headers))
+    use #(remaining_headers, permutation) <- result.try(m(found_headers))
     remaining_headers
     |> util.pop_first(fn(el: #(Int, String)) { util.check(name, el.1) })
     |> result.map_error(fn(_) { FailedHeaderParsing(NotEnoughCells) })
-    |> result.try(fn(in) {
+    |> result.map(fn(in) {
       let #(#(index, _), passed_headers) = in
-      permutation
-      |> util.append_index(index)
-      |> result.map(fn(perm) { #(passed_headers, perm) })
-      |> result.map_error(fn(_) { FailedHeaderParsing(NotEnoughCells) })
+      #(passed_headers, twister.add(permutation, index))
     })
   }
 
@@ -416,12 +411,7 @@ pub fn labelled_column(
     }
   }
 
-  Parser(
-    ..parser,
-    mode: ColumnBased,
-    make_permutation: Some(make_permutation),
-    parse: parse,
-  )
+  Parser(..parser, mode: ColumnBased(make_permutation), parse: parse)
 }
 
 /// Simply skip the next `count` columns without reading their contents.
@@ -473,10 +463,11 @@ pub fn set_expected_headers(
   parser: Parser(a, e),
   headers: ExpectedHeaders,
 ) -> Parser(a, e) {
-  assert parser.mode == Unset
-    || parser.mode == Ordered
-    || parser.mode == Ordered
-  Parser(..parser, mode: Ordered, expect_headers: headers)
+  Parser(..parser, mode: case parser.mode {
+    Unset -> Ordered(headers)
+    Ordered(_) -> Ordered(headers)
+    ColumnBased(_) -> panic
+  })
 }
 
 /// Helper function for converting exact `ExpectedHeaders` into broader comparisons, by first
@@ -556,14 +547,8 @@ pub fn expect_headers(
   parser: Parser(a, e),
   headers: List(String),
 ) -> Parser(a, e) {
-  assert parser.mode == Unset
-    || parser.mode == Ordered
-    || parser.mode == Ordered
-  Parser(
-    ..parser,
-    mode: Ordered,
-    expect_headers: VerifyOrdered(list.map(headers, util.equivalent)),
-  )
+  parser
+  |> set_expected_headers(VerifyOrdered(list.map(headers, util.equivalent)))
 }
 
 /// Function to set a specific row separator, instead of the default newline (`\n`)
@@ -1358,6 +1343,12 @@ fn require_length(
   }
 }
 
+/// TODO : Based on `parser.mode`, make two functions for `Ordered` and `ColumnBased`.
+/// 
+/// In `Ordered`, consume the first row and based on `ExpectedHeaders`, either return `Ok` or `Error`.
+/// 
+/// In `ColumnBased`, consume the first row and transform it into a `Permutation`, and then map the `Stream` using that permutation.
+/// 
 fn process_headers(
   parser: Parser(a, e),
   stream: Stream(List(String)),
