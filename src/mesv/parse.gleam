@@ -93,6 +93,7 @@
 //// ```
 //// 
 
+import aqueduct.{type Stream, Done, Next}
 import gleam/function
 import gleam/int
 import gleam/list
@@ -101,7 +102,6 @@ import gleam/order.{type Order}
 import gleam/pair
 import gleam/result
 import gleam/string
-import mesv/stream.{type Stream, Done, Next}
 import mesv/util.{type Predicate}
 import twister.{type Permutation}
 
@@ -792,7 +792,7 @@ pub fn preprocess(
 
   let row_stream =
     row_stream
-    |> stream.map(split_columns)
+    |> aqueduct.map(split_columns)
 
   process_headers(parser, row_stream)
   |> result.map(fn(out) {
@@ -914,7 +914,7 @@ pub fn run(
     })
   }
   source
-  |> stream.map(process_row)
+  |> aqueduct.map(process_row)
 }
 
 pub fn then_collect(
@@ -928,7 +928,7 @@ pub fn then_collect(
 ) {
   result.map(in, fn(out) {
     let #(metadata, stream) = out
-    #(metadata, stream.to_list(stream))
+    #(metadata, aqueduct.collect(stream))
   })
 }
 
@@ -938,7 +938,7 @@ pub fn then_collect_data(
     PreprocessingError,
   ),
 ) -> Result(List(Result(a, DataRowError(e))), PreprocessingError) {
-  result.map(in, fn(out) { stream.to_list(out.1) })
+  result.map(in, fn(out) { aqueduct.collect(out.1) })
 }
 
 /// A helper function meant to be called with the output of [`parse.then`](parse.html#then)
@@ -971,7 +971,7 @@ pub fn then_collect_parsed(
   |> result.map(fn(output) {
     output.1
     |> get_parsed()
-    |> stream.to_list()
+    |> aqueduct.collect()
   })
 }
 
@@ -999,7 +999,7 @@ pub fn then_collect_parsed(
 /// 
 pub fn get_parsed(rows: Stream(Result(a, DataRowError(e)))) -> Stream(a) {
   rows
-  |> stream.filter_map(function.identity)
+  |> aqueduct.filter_map(function.identity)
 }
 
 /// > **This function is deprecated, and should be replaced by using the
@@ -1030,7 +1030,7 @@ pub fn parse(
     let #(_metadata, parser, row_stream) = preprocess_out
     parser
     |> run(row_stream)
-    |> stream.to_list()
+    |> aqueduct.collect()
     |> result.partition()
     |> pair.map_first(list.reverse)
     |> pair.map_second(list.reverse)
@@ -1136,7 +1136,7 @@ fn make_header_processor(
 
 fn make_row_stream(parser: Parser(a, e)) -> fn(String) -> Stream(String) {
   fn(source: String) -> Stream(String) {
-    stream.from_divider(
+    aqueduct.from_divider(
       source,
       util.take_until_unescaped(parser.row_separator, parser.escaper),
     )
@@ -1260,13 +1260,13 @@ fn make_metadata_reader(
   Result(#(Stream(String), List(#(String, String))), PreprocessingError) {
   let metadata_parser = make_metadata_parser(parser)
   fn(rows: Stream(String)) {
-    case stream.next(rows) {
+    case aqueduct.next(rows) {
       Next(stream, "---") -> {
         let #(stream, metadata_results) =
           stream
-          |> stream.collect_until(fn(row: String) -> Bool { row == "---" })
+          |> aqueduct.take_until(fn(row: String) -> Bool { row == "---" })
           |> pair.map_second(list.map(_, metadata_parser))
-          |> pair.map_first(stream.drop(_, 1))
+          |> pair.map_first(aqueduct.drop(_, 1))
 
         result.all(metadata_results)
         |> result.map_error(fn(_) {
@@ -1281,8 +1281,8 @@ fn make_metadata_reader(
         })
         |> result.map(fn(metadata) { #(stream, metadata) })
       }
-      Next(stream, row) -> Ok(#(stream.prepend(stream, row), []))
-      Done -> Ok(#(stream.empty(), []))
+      Next(stream, row) -> Ok(#(aqueduct.prepend(stream, row), []))
+      Done -> Ok(#(aqueduct.empty(), []))
     }
   }
 }
@@ -1355,8 +1355,10 @@ fn process_headers(
 ) -> Result(#(Parser(a, e), Stream(List(String))), PreprocessingError) {
   let process_headers = make_header_processor(parser)
 
-  let new_parser = parser |> set_expected_headers(Empty)
-  case stream.next(stream) {
+  let new_parser =
+    parser
+    |> set_expected_headers(Empty)
+  case aqueduct.next(stream) {
     Next(rest, header_row) ->
       case parser.mode, parser.expect_headers {
         Unset, _ -> {
@@ -1370,7 +1372,7 @@ fn process_headers(
         Ordered, expected | Ordered, expected ->
           case expected {
             Ignore -> Ok(#(new_parser, rest))
-            Empty -> Ok(#(new_parser, rest |> stream.prepend(header_row)))
+            Empty -> Ok(#(new_parser, rest |> aqueduct.prepend(header_row)))
             VerifyOrdered(predicates) ->
               predicates
               |> process_headers(header_row)
@@ -1386,7 +1388,8 @@ fn process_headers(
               |> result.map(fn(permutation) {
                 #(
                   new_parser,
-                  rest |> stream.map(util.execute_default(permutation, _, "")),
+                  rest
+                    |> aqueduct.map(twister.run_default(permutation, _, "")),
                 )
               })
 

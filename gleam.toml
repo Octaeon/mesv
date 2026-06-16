@@ -24,6 +24,7 @@ internal_modules = ["mesv/util"]
 [dependencies]
 gleam_stdlib = ">= 1.0.0 and < 2.0.0"
 twister = ">= 1.0.0 and < 2.0.0"
+aqueduct = ">= 1.0.0 and < 2.0.0"
 
 [dev_dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
