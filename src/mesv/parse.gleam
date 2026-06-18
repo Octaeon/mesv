@@ -1353,49 +1353,57 @@ fn process_headers(
   parser: Parser(a, e),
   stream: Stream(List(String)),
 ) -> Result(#(Parser(a, e), Stream(List(String))), PreprocessingError) {
-  let process_headers = make_header_processor(parser)
-
-  let new_parser =
-    parser
-    |> set_expected_headers(Empty)
   case aqueduct.next(stream) {
-    Next(rest, header_row) ->
-      case parser.mode, parser.expect_headers {
-        Unset, _ -> {
-          echo "Parser mode unset when processing headers"
-          Error(SourceEmpty)
-        }
-        Ordered, VerifyOrdered(_) -> {
-          echo "Wrong parser mode set for verifying"
-          Error(SourceEmpty)
-        }
-        Ordered, expected | Ordered, expected ->
-          case expected {
-            Ignore -> Ok(#(new_parser, rest))
-            Empty -> Ok(#(new_parser, rest |> aqueduct.prepend(header_row)))
-            VerifyOrdered(predicates) ->
-              predicates
-              |> process_headers(header_row)
-              |> result.map(fn(_) { #(new_parser, rest) })
-          }
-        ColumnBased, _ ->
-          case parser.make_permutation {
-            Some(make_perm) ->
-              header_row
-              |> list.index_map(fn(h, i) { #(i, h) })
-              |> make_perm()
-              |> result.map(fn(out) { out.1 })
-              |> result.map(fn(permutation) {
-                #(
-                  new_parser,
-                  rest
-                    |> aqueduct.map(twister.run_default(permutation, _, "")),
-                )
-              })
-
-            None -> Error(SourceEmpty)
-          }
+    Next(rest, element) ->
+      case parser.mode {
+        Unset -> todo
+        Ordered(Ignore) -> Ok(#(parser, rest))
+        Ordered(Empty) -> Ok(#(parser, aqueduct.prepend(rest, element)))
+        Ordered(VerifyOrdered(predicates)) ->
+          make_header_processor(parser)(predicates, element)
+          |> result.map(fn(_) { #(parser, rest) })
+        ColumnBased(make_permuter) -> todo
       }
     Done -> Error(SourceEmpty)
   }
+  // case aqueduct.next(stream) {
+  //   Next(rest, header_row) ->
+  //     case parser.mode, parser.expect_headers {
+  //       Unset, _ -> {
+  //         echo "Parser mode unset when processing headers"
+  //         Error(SourceEmpty)
+  //       }
+  //       Ordered, VerifyOrdered(_) -> {
+  //         echo "Wrong parser mode set for verifying"
+  //         Error(SourceEmpty)
+  //       }
+  //       Ordered, expected | Ordered, expected ->
+  //         case expected {
+  //           Ignore -> Ok(#(new_parser, rest))
+  //           Empty -> Ok(#(new_parser, rest |> aqueduct.prepend(header_row)))
+  //           VerifyOrdered(predicates) ->
+  //             predicates
+  //             |> process_headers(header_row)
+  //             |> result.map(fn(_) { #(new_parser, rest) })
+  //         }
+  //       ColumnBased, _ ->
+  //         case parser.make_permutation {
+  //           Some(make_perm) ->
+  //             header_row
+  //             |> list.index_map(fn(h, i) { #(i, h) })
+  //             |> make_perm()
+  //             |> result.map(fn(out) { out.1 })
+  //             |> result.map(fn(permutation) {
+  //               #(
+  //                 new_parser,
+  //                 rest
+  //                   |> aqueduct.map(twister.run_default(permutation, _, "")),
+  //               )
+  //             })
+
+  //           None -> Error(SourceEmpty)
+  //         }
+  //     }
+  //   Done -> Error(SourceEmpty)
+  // }
 }

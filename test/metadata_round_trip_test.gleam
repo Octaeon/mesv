@@ -8,13 +8,13 @@
 //// This module is for testing this property for formatting and parsing metadata along with normal CSV data.
 //// 
 
+import aqueduct
 import gleam/list
 import mesv/format.{type Formatter}
 import mesv/parse.{
   type DataRowError, type Parser, type PreprocessingError, RowStream,
   VerifyOrdered,
 }
-import mesv/stream
 import mesv/util
 import mesv_test.{type RowData}
 
@@ -49,7 +49,7 @@ fn build_test_unit(
     formatter
     |> format.set_headers(headers)
     |> format.preprocess(metadata)
-    |> format.then_run(stream.from_list(rows))
+    |> format.then_run(aqueduct.from_list(rows))
     |> fn(stream) {
       parser
       |> parse.set_expected_headers(VerifyOrdered(

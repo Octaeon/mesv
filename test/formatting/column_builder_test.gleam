@@ -1,7 +1,7 @@
+import aqueduct
 import gleam/int
 import gleam/option.{None}
 import mesv/format
-import mesv/stream
 import mesv_test.{type RowData}
 
 pub fn default_normal_test() -> Nil {
@@ -13,7 +13,7 @@ pub fn default_normal_test() -> Nil {
     })
     |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join("\n")
 
   assert formatted
@@ -33,7 +33,7 @@ pub fn default_column_separator_test() -> Nil {
     |> format.set_col_sep(col_sep)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list(mesv_test.column_separator_data(col_sep)),
+      aqueduct.from_list(mesv_test.column_separator_data(col_sep)),
     )
     |> format.then_join("\n")
 
@@ -54,7 +54,9 @@ pub fn default_row_separator_test() -> Nil {
     |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_row_sep(row_sep)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_run(
+      aqueduct.from_list(mesv_test.row_separator_data(row_sep)),
+    )
     |> format.then_join(row_sep)
 
   assert formatted
@@ -73,7 +75,7 @@ pub fn default_escaper_test() -> Nil {
     |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_escaper(esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_run(aqueduct.from_list(mesv_test.escaper_data(esc)))
     |> format.then_join("\n")
 
   assert formatted
@@ -90,7 +92,7 @@ pub fn rearranged_normal_test() -> Nil {
     |> format.column("Name", None, fn(row: RowData) { row.name })
     |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join("\n")
 
   assert formatted
@@ -110,7 +112,7 @@ pub fn rearranged_column_separator_test() -> Nil {
     |> format.set_col_sep(col_sep)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list(mesv_test.column_separator_data(col_sep)),
+      aqueduct.from_list(mesv_test.column_separator_data(col_sep)),
     )
     |> format.then_join("\n")
 
@@ -131,7 +133,9 @@ pub fn rearranged_row_separator_test() -> Nil {
     |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_row_sep(row_sep)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_run(
+      aqueduct.from_list(mesv_test.row_separator_data(row_sep)),
+    )
     |> format.then_join(row_sep)
 
   assert formatted
@@ -150,7 +154,7 @@ pub fn rearranged_escaper_test() -> Nil {
     |> format.column("Comment", None, fn(row: RowData) { row.comment })
     |> format.set_escaper(esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_run(aqueduct.from_list(mesv_test.escaper_data(esc)))
     |> format.then_join("\n")
 
   assert formatted
@@ -173,7 +177,7 @@ pub fn custom_normal_test() -> Nil {
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -197,7 +201,7 @@ pub fn custom_column_separator_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list(mesv_test.column_separator_data(col_sep)),
+      aqueduct.from_list(mesv_test.column_separator_data(col_sep)),
     )
     |> format.then_join(row_sep)
 
@@ -222,7 +226,9 @@ pub fn custom_row_separator_test() -> Nil {
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_run(
+      aqueduct.from_list(mesv_test.row_separator_data(row_sep)),
+    )
     |> format.then_join(row_sep)
 
   assert formatted
@@ -245,7 +251,7 @@ pub fn custom_escaper_test() -> Nil {
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_run(aqueduct.from_list(mesv_test.escaper_data(esc)))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -268,7 +274,7 @@ pub fn custom_rearranged_normal_test() -> Nil {
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -292,7 +298,7 @@ pub fn custom_rearranged_column_separator_test() -> Nil {
     |> format.set_escaper(esc)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list(mesv_test.column_separator_data(col_sep)),
+      aqueduct.from_list(mesv_test.column_separator_data(col_sep)),
     )
     |> format.then_join(row_sep)
 
@@ -317,7 +323,9 @@ pub fn custom_rearranged_row_separator_test() -> Nil {
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_run(
+      aqueduct.from_list(mesv_test.row_separator_data(row_sep)),
+    )
     |> format.then_join(row_sep)
 
   assert formatted
@@ -340,7 +348,7 @@ pub fn custom_rearranged_escaper_test() -> Nil {
     |> format.set_row_sep(row_sep)
     |> format.set_escaper(esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_run(aqueduct.from_list(mesv_test.escaper_data(esc)))
     |> format.then_join(row_sep)
 
   assert formatted

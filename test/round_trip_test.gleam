@@ -5,6 +5,7 @@
 //// `a == parse(format(a))`, then using the `mesv.format` and `mesv.parse` modules to convert to csv and back will satisfy the condition
 //// `List(a) == mesv.parse(mesv.format(List(a)))`, no matter the specified separators and escapers.
 
+import aqueduct
 import gleam/list
 import gleam/result
 import mesv/format.{type Formatter}
@@ -12,7 +13,6 @@ import mesv/parse.{
   type DataRowError, type Parser, type PreprocessingError, RowStream,
   VerifyOrdered,
 }
-import mesv/stream
 import mesv/util
 import mesv_test.{type RowData}
 
@@ -42,7 +42,7 @@ fn build_test_unit(
     formatter
     |> format.set_headers(headers)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(rows))
+    |> format.then_run(aqueduct.from_list(rows))
     |> fn(stream) {
       parser
       |> parse.set_expected_headers(
@@ -51,7 +51,7 @@ fn build_test_unit(
       |> parse.preprocess(RowStream(stream))
       |> parse.then_run()
       |> result.map(fn(preprocessing_output) {
-        stream.to_list(preprocessing_output.1)
+        aqueduct.collect(preprocessing_output.1)
       })
     }
   }

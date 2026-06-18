@@ -1,5 +1,5 @@
+import aqueduct
 import mesv/format
-import mesv/stream
 import mesv_test.{RowData}
 
 pub fn default_normal_test() -> Nil {
@@ -9,7 +9,7 @@ pub fn default_normal_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -25,7 +25,7 @@ pub fn default_whitespace_unescaped_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list([
+      aqueduct.from_list([
         RowData(
           "Albert",
           69,
@@ -48,7 +48,7 @@ pub fn default_whitespace_escaped_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list([
+      aqueduct.from_list([
         RowData(
           "Baldur",
           67,
@@ -71,7 +71,7 @@ pub fn default_column_separator_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list(mesv_test.column_separator_data(col_sep)),
+      aqueduct.from_list(mesv_test.column_separator_data(col_sep)),
     )
     |> format.then_join(row_sep)
 
@@ -87,7 +87,9 @@ pub fn default_row_separator_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_run(
+      aqueduct.from_list(mesv_test.row_separator_data(row_sep)),
+    )
     |> format.then_join(row_sep)
 
   assert formatted
@@ -102,7 +104,7 @@ pub fn default_escaper_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_run(aqueduct.from_list(mesv_test.escaper_data(esc)))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -118,7 +120,7 @@ pub fn custom_col_normal_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -134,7 +136,7 @@ pub fn custom_col_column_separator_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list(mesv_test.column_separator_data(col_sep)),
+      aqueduct.from_list(mesv_test.column_separator_data(col_sep)),
     )
     |> format.then_join(row_sep)
 
@@ -150,7 +152,9 @@ pub fn custom_col_row_separator_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_run(
+      aqueduct.from_list(mesv_test.row_separator_data(row_sep)),
+    )
     |> format.then_join(row_sep)
 
   assert formatted
@@ -165,7 +169,7 @@ pub fn custom_col_escaper_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_run(aqueduct.from_list(mesv_test.escaper_data(esc)))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -181,7 +185,7 @@ pub fn custom_row_normal_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -197,7 +201,7 @@ pub fn custom_row_column_separator_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list(mesv_test.column_separator_data(col_sep)),
+      aqueduct.from_list(mesv_test.column_separator_data(col_sep)),
     )
     |> format.then_join(row_sep)
 
@@ -213,7 +217,9 @@ pub fn custom_row_row_separator_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_run(
+      aqueduct.from_list(mesv_test.row_separator_data(row_sep)),
+    )
     |> format.then_join(row_sep)
 
   assert formatted
@@ -228,7 +234,7 @@ pub fn custom_row_escaper_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_run(aqueduct.from_list(mesv_test.escaper_data(esc)))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -244,7 +250,7 @@ pub fn custom_esc_normal_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -260,7 +266,7 @@ pub fn custom_esc_column_separator_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list(mesv_test.column_separator_data(col_sep)),
+      aqueduct.from_list(mesv_test.column_separator_data(col_sep)),
     )
     |> format.then_join(row_sep)
 
@@ -276,7 +282,9 @@ pub fn custom_esc_row_separator_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_run(
+      aqueduct.from_list(mesv_test.row_separator_data(row_sep)),
+    )
     |> format.then_join(row_sep)
 
   assert formatted
@@ -291,7 +299,7 @@ pub fn custom_esc_escaper_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_run(aqueduct.from_list(mesv_test.escaper_data(esc)))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -307,7 +315,7 @@ pub fn combined_normal_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -323,7 +331,7 @@ pub fn combined_column_separator_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
     |> format.then_run(
-      stream.from_list(mesv_test.column_separator_data(col_sep)),
+      aqueduct.from_list(mesv_test.column_separator_data(col_sep)),
     )
     |> format.then_join(row_sep)
 
@@ -339,7 +347,9 @@ pub fn combined_row_separator_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.row_separator_data(row_sep)))
+    |> format.then_run(
+      aqueduct.from_list(mesv_test.row_separator_data(row_sep)),
+    )
     |> format.then_join(row_sep)
 
   assert formatted
@@ -354,7 +364,7 @@ pub fn combined_escaper_test() -> Nil {
   let formatted =
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.escaper_data(esc)))
+    |> format.then_run(aqueduct.from_list(mesv_test.escaper_data(esc)))
     |> format.then_join(row_sep)
 
   assert formatted

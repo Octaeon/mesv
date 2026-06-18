@@ -1,5 +1,5 @@
+import aqueduct
 import mesv/format
-import mesv/stream
 import mesv_test
 
 pub fn default_normal_test() -> Nil {
@@ -10,7 +10,7 @@ pub fn default_normal_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.set_headers(["Name", "Age", "Comment"])
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -26,7 +26,7 @@ pub fn default_whitespace_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.set_headers(["  Name  ", "  Age  ", "  Comment  "])
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -42,7 +42,7 @@ pub fn default_normal_escaped_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.set_headers(["Name", "\"Age\"", "Comment"])
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -58,7 +58,7 @@ pub fn default_whitespace_escaped_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.set_headers(["  Name  ", "\"  Age  \"", "  Comment  "])
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -74,7 +74,7 @@ pub fn default_whitespace_around_escapers_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.set_headers(["  Name  ", "  \"Age\"  ", "  Comment  "])
     |> format.preprocess([])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted

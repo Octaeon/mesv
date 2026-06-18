@@ -1,7 +1,7 @@
+import aqueduct
 import gleam/option.{None, Some}
 import mesv/format.{LeftAlignPad, TrimAll, TrimStart}
 import mesv/format/encode
-import mesv/stream
 
 type Row =
   #(Int, Bool, String, Int)
@@ -23,7 +23,7 @@ pub fn default_normal_test() -> Nil {
     })
     |> format.set_default_whitespace(TrimAll)
     |> format.preprocess([])
-    |> format.then_run(stream.from_list([#(16, True, "huh?", 0)]))
+    |> format.then_run(aqueduct.from_list([#(16, True, "huh?", 0)]))
     |> format.then_join("\n")
 
   assert formatted

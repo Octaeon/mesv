@@ -1,5 +1,5 @@
+import aqueduct
 import mesv/format
-import mesv/stream
 import mesv_test.{RowData}
 
 pub fn default_basic_test() -> Nil {
@@ -11,7 +11,7 @@ pub fn default_basic_test() -> Nil {
     mesv_test.row_data_formatter(col_sep, row_sep, esc)
     |> format.set_meta_sep(meta_sep)
     |> format.preprocess([#("first", "test")])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -29,7 +29,7 @@ pub fn default_escape_all_test() -> Nil {
     |> format.set_meta_sep(meta_sep)
     |> format.set_escape_all(True)
     |> format.preprocess([#("we're innocent", "don't escape us!")])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -50,7 +50,7 @@ pub fn default_multiple_line_test() -> Nil {
       #("I'm", "testing"),
       #("multiple", "line metadata."),
     ])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -71,7 +71,7 @@ pub fn default_escaped_key_test() -> Nil {
       #("meta" <> meta_sep <> " key", "also no"),
       #("row" <> row_sep <> "separators?", "I'm 'fraid *not*"),
     ])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -98,7 +98,7 @@ pub fn default_escaped_value_test() -> Nil {
       ),
       #("third", "row separators" <> row_sep <> "also no"),
     ])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -120,7 +120,7 @@ pub fn default_column_separator_metadata_key_test() -> Nil {
     |> format.preprocess([
       #("column" <> col_sep <> " separators", "are allowed in metadata"),
     ])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -142,7 +142,7 @@ pub fn default_column_separator_metadata_value_test() -> Nil {
     |> format.preprocess([
       #("also in", "metadata " <> col_sep <> " values"),
     ])
-    |> format.then_run(stream.from_list(mesv_test.normal_data()))
+    |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
     |> format.then_join(row_sep)
 
   assert formatted
@@ -165,7 +165,7 @@ pub fn default_metadata_separator_in_data_test() -> Nil {
       #("the metadata", "doesn't matter here"),
     ])
     |> format.then_run(
-      stream.from_list([
+      aqueduct.from_list([
         RowData(
           "Arson",
           2,
@@ -196,12 +196,12 @@ pub fn default_headers_test() -> Nil {
   assert {
       formatter
       |> format.preprocess([])
-      |> format.then_run(stream.from_list(mesv_test.normal_data()))
+      |> format.then_run(aqueduct.from_list(mesv_test.normal_data()))
       |> format.then_join(row_sep)
     }
     == {
       formatter
-      |> format.run(stream.from_list(mesv_test.normal_data()))
+      |> format.run(aqueduct.from_list(mesv_test.normal_data()))
       |> format.then_join(row_sep)
     }
     as "Formatting default parameters | Metadata, preprocess + then == run when there's no metadata"

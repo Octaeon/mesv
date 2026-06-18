@@ -63,11 +63,11 @@
 //// ```
 //// 
 
+import aqueduct.{type Stream}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
-import mesv/stream.{type Stream}
 import mesv/util
 
 // ==== Public Types ====
@@ -399,17 +399,17 @@ pub fn preprocess(
   metadata: List(#(String, String)),
 ) -> #(Formatter(a), Stream(String)) {
   case metadata {
-    [] -> #(formatter, stream.empty())
+    [] -> #(formatter, aqueduct.empty())
     non_empty -> {
       let metadata_stream =
-        stream.from_list(non_empty)
-        |> stream.map(make_metadata_formatter(formatter))
-        |> stream.wrap(in: "---")
+        aqueduct.from_list(non_empty)
+        |> aqueduct.map(make_metadata_formatter(formatter))
+        |> aqueduct.wrap(in: "---")
       case formatter.headers {
         Some(headers) -> {
           let stream =
             metadata_stream
-            |> stream.append(make_row_processor(formatter)(headers))
+            |> aqueduct.append(make_row_processor(formatter)(headers))
           #(Formatter(..formatter, headers: None), stream)
         }
         None -> #(formatter, metadata_stream)
@@ -427,14 +427,14 @@ pub fn then_run(
   data: Stream(a),
 ) -> Stream(String) {
   let #(formatter, metadata_stream) = in
-  stream.concat(metadata_stream, run(formatter, data))
+  aqueduct.concat(metadata_stream, run(formatter, data))
 }
 
 pub fn add_row_sep(
   stream: Stream(String),
   separator sep: String,
 ) -> Stream(String) {
-  stream |> stream.map(fn(row) { row <> sep })
+  stream |> aqueduct.map(fn(row) { row <> sep })
 }
 
 /// Helper function to use after calling the [`format.then_run`](format.html#then_run),
@@ -444,7 +444,7 @@ pub fn add_row_sep(
 /// 
 pub fn then_join(stream: Stream(String), with separator: String) -> String {
   stream
-  |> stream.join(fn(row, previous) { previous <> separator <> row })
+  |> aqueduct.join(fn(row, previous) { previous <> separator <> row })
   |> result.unwrap("")
 }
 
@@ -464,9 +464,9 @@ pub fn then_join(stream: Stream(String), with separator: String) -> String {
 /// 
 pub fn run(formatter: Formatter(a), elements: Stream(a)) -> Stream(String) {
   elements
-  |> stream.map(make_encoder(formatter))
-  |> stream.maybe_prepend(get_headers(formatter))
-  |> stream.map(make_row_processor(formatter))
+  |> aqueduct.map(make_encoder(formatter))
+  |> aqueduct.maybe_prepend(get_headers(formatter))
+  |> aqueduct.map(make_row_processor(formatter))
 }
 
 /// > **This function is deprecated, and should be replaced with the
@@ -481,8 +481,8 @@ function to `run`. This function is still available to call, but should be repla
 In new code, use the `run` function.
 ")
 pub fn format(formatter: Formatter(a), elements: List(a)) -> String {
-  run(formatter, elements |> stream.from_list())
-  |> stream.join(fn(row, previous) {
+  run(formatter, elements |> aqueduct.from_list())
+  |> aqueduct.join(fn(row, previous) {
     previous <> formatter.row_separator <> row
   })
   |> result.unwrap("")
