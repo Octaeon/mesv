@@ -97,7 +97,6 @@ import aqueduct.{type Stream, Done, Next}
 import gleam/function
 import gleam/int
 import gleam/list
-import gleam/option.{type Option, None, Some}
 import gleam/order.{type Order}
 import gleam/pair
 import gleam/result
@@ -1341,6 +1340,20 @@ fn require_length(
       order.Gt -> Error(order.Gt)
     }
   }
+}
+
+fn process_ordered(
+  parser: Parser(a, e),
+  stream: Stream(List(String)),
+) -> Result(#(Parser(a, e), Stream(List(String))), PreprocessingError) {
+  todo
+}
+
+fn process_column_based(
+  parser: Parser(a, e),
+  stream: Stream(List(String)),
+) -> Result(#(Parser(a, e), Stream(List(String))), PreprocessingError) {
+  todo
 }
 
 /// TODO : Based on `parser.mode`, make two functions for `Ordered` and `ColumnBased`.
